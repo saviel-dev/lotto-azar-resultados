@@ -1,73 +1,74 @@
-# Welcome to your Lovable project
+# Lotto Azar – Resultados de Loterías en Tiempo Real
 
-## Project info
+Sitio web de resultados de loterías venezolanas en tiempo real. Consulta los últimos sorteos, historial semanal y las predicciones diarias de La Pirámide.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Características
 
-## How can I edit this code?
+- 🏆 **Últimos resultados** — resultado del sorteo más reciente con animal y número
+- 📅 **Historial semanal** — tabla con resultados por fecha y horario (hasta 7 días)
+- 🔺 **La Pirámide** — predicción del día en formato pirámide invertida
+- 🔍 **Búsqueda y filtros** — filtra por animal, fecha desde/hasta
+- 📱 **Responsive** — diseño adaptado a móvil y escritorio
 
-There are several ways of editing your application.
+## Loterías cubiertas
 
-**Use Lovable**
+- Lotto Azar
+- Triple Táchira
+- Kino Táchira
+- Granjita
+- La Guaira
+- Caracas
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Tecnologías
 
-Changes made via Lovable will be committed automatically to this repo.
+- [Vite](https://vitejs.dev/) — bundler ultrarrápido
+- [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+- [Tailwind CSS](https://tailwindcss.com/) — estilos utilitarios
+- [shadcn/ui](https://ui.shadcn.com/) — componentes UI
+- [Framer Motion](https://www.framer.com/motion/) — animaciones
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Instalación y desarrollo
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# 1. Clonar el repositorio
+git clone <URL_DEL_REPOSITORIO>
+cd lotto-azar-live
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# 2. Instalar dependencias
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 3. Iniciar servidor de desarrollo
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+El servidor de desarrollo estará disponible en `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Scripts disponibles
 
-**Use GitHub Codespaces**
+| Comando | Descripción |
+|---|---|
+| `npm run dev` | Servidor de desarrollo con hot-reload |
+| `npm run build` | Compilar para producción |
+| `npm run preview` | Previsualizar el build de producción |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Estructura del proyecto
 
-## What technologies are used for this project?
+```
+src/
+├── components/
+│   ├── Footer.tsx          # Footer del sitio
+│   ├── HeroSection.tsx     # Sección principal con último resultado
+│   ├── HistorySection.tsx  # Tabla de historial de sorteos
+│   ├── LottoHeader.tsx     # Cabecera fija de navegación
+│   └── PyramidSection.tsx  # La Pirámide del día
+├── data/
+│   └── mockData.ts         # Datos y generación de resultados
+├── pages/
+│   └── Index.tsx           # Página principal
+└── index.css               # Estilos globales y componentes
+```
 
-This project is built with:
+## Licencia
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+© 2026 Lotto Azar. Todos los derechos reservados.  
+Los resultados se muestran con fines informativos únicamente.
