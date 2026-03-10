@@ -16,9 +16,6 @@ const LottoHeader = ({ onToggleFilters }: LottoHeaderProps) => {
     >
       <div className="flex-1" />
       <div className="flex items-center gap-2">
-        <div className="h-8 w-8 md:h-9 md:w-9 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-primary-foreground font-black text-sm md:text-base">LA</span>
-        </div>
         <h1 className="text-lg md:text-xl font-extrabold text-primary tracking-tight">
           Lotto Azar
         </h1>

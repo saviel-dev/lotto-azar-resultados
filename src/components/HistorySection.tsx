@@ -1,49 +1,92 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { LotteryResult } from "@/data/mockData";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface HistorySectionProps {
   results: LotteryResult[];
 }
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 24, scale: 0.96 },
-  show: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.35,
-      delay: Math.min(i * 0.04, 0.4),
-      ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
-    },
-  }),
-};
+// Colour ring per animal initial (decorative, mimics the red circle style)
+const RING_COLORS = [
+  "#e53e3e", "#dd6b20", "#d69e2e", "#38a169",
+  "#3182ce", "#805ad5", "#d53f8c", "#319795",
+  "#e53e3e", "#c53030",
+];
+
+function getAnimalColor(animal: string): string {
+  let hash = 0;
+  for (let i = 0; i < animal.length; i++) hash += animal.charCodeAt(i);
+  return RING_COLORS[hash % RING_COLORS.length];
+}
+
+function formatDateHeader(dateStr: string) {
+  // "2026-03-10" → "03-10"
+  const parts = dateStr.split("-");
+  return `${parts[1]}-${parts[2]}`;
+}
+
+function formatDateFull(dateStr: string) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+function getDayName(dateStr: string) {
+  const d = new Date(dateStr + "T12:00:00");
+  return DAY_NAMES[d.getDay()];
+}
+
+const HOURS_ORDER = [
+  "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
+  "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM",
+  "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM",
+];
 
 const HistorySection = ({ results }: HistorySectionProps) => {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(0);
+  const COLS_PER_PAGE = 5;
 
-  const filtered = useMemo(() => {
-    let r = results;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter(
-        (x) =>
-          x.animal.toLowerCase().includes(q) ||
-          x.number.toString().includes(q)
-      );
+  // Build a lookup map: [date][hour] → result
+  const resultMap = useMemo(() => {
+    const map: Record<string, Record<string, LotteryResult>> = {};
+    for (const r of results) {
+      if (!map[r.date]) map[r.date] = {};
+      map[r.date][r.hour] = r;
     }
-    if (dateFrom) r = r.filter((x) => x.date >= dateFrom);
-    if (dateTo) r = r.filter((x) => x.date <= dateTo);
-    return r.slice(0, 30);
-  }, [results, search, dateFrom, dateTo]);
+    return map;
+  }, [results]);
+
+  // Sorted unique dates
+  const allDates = useMemo(() => {
+    const dates = Array.from(new Set(results.map((r) => r.date))).sort(
+      (a, b) => (a < b ? 1 : -1) // most recent first
+    );
+    let filtered = dates;
+    if (dateFrom) filtered = filtered.filter((d) => d >= dateFrom);
+    if (dateTo)   filtered = filtered.filter((d) => d <= dateTo);
+    return filtered;
+  }, [results, dateFrom, dateTo]);
+
+  // Pagination for columns
+  const totalPages = Math.ceil(allDates.length / COLS_PER_PAGE);
+  const visibleDates = allDates.slice(
+    page * COLS_PER_PAGE,
+    page * COLS_PER_PAGE + COLS_PER_PAGE
+  );
+
+  // Filter rows by search (highlight matching animal name)
+  const searchLower = search.trim().toLowerCase();
+  const searchMatches = (animal: string) =>
+    !searchLower || animal.toLowerCase().includes(searchLower);
 
   return (
-    <section className="w-full py-12 px-4" aria-label="Historial de sorteos">
+    <section className="w-full py-12 px-2 sm:px-4" aria-label="Historial de sorteos">
+      {/* Title */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -51,9 +94,10 @@ const HistorySection = ({ results }: HistorySectionProps) => {
         transition={{ duration: 0.5 }}
         className="text-center mb-8"
       >
-        <h2 className="text-display-sm text-foreground mb-2">
-          Historial de Sorteos
-        </h2>
+        <div className="flex items-center justify-center gap-2 mb-1">
+          <CalendarDays className="h-6 w-6 text-primary" />
+          <h2 className="text-display-sm text-foreground">Historial de Sorteos</h2>
+        </div>
         <p className="text-sm text-muted-foreground">Últimos resultados de Lotto Azar</p>
         <div className="section-divider mt-4" />
       </motion.div>
@@ -64,80 +108,150 @@ const HistorySection = ({ results }: HistorySectionProps) => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="max-w-3xl mx-auto mb-8 space-y-3"
+        className="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 items-end"
       >
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar animal o número..."
+        {/* Search */}
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar animal..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-11 bg-card border-border rounded-lg"
-            aria-label="Buscar animal o número"
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            className="history-filter-input pl-9"
+            aria-label="Buscar animal"
           />
         </div>
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Desde</label>
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-10 bg-card"
-              aria-label="Fecha desde"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Hasta</label>
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-10 bg-card"
-              aria-label="Fecha hasta"
-            />
-          </div>
+        {/* From */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted-foreground">Desde</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+            className="history-filter-input"
+            aria-label="Fecha desde"
+          />
+        </div>
+        {/* To */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted-foreground">Hasta</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+            className="history-filter-input"
+            aria-label="Fecha hasta"
+          />
         </div>
       </motion.div>
 
-      {/* Grid */}
-      <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((r, idx) => (
-          <motion.div
-            key={`${r.id}-${search}-${dateFrom}-${dateTo}`}
-            custom={idx}
-            variants={cardVariants}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-20px" }}
-            className="result-card"
-          >
-            <div className="text-4xl flex-shrink-0" aria-hidden="true">{r.emoji}</div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold bg-primary/10 text-primary rounded-md px-2 py-0.5">
-                  {r.hour}
+      {/* Table wrapper */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-30px" }}
+        transition={{ duration: 0.45, delay: 0.15 }}
+        className="max-w-5xl mx-auto"
+      >
+        {allDates.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">
+            No se encontraron resultados.
+          </p>
+        ) : (
+          <>
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-end gap-2 mb-3">
+                <span className="text-xs text-muted-foreground">
+                  {formatDateFull(allDates[allDates.length - 1])} –{" "}
+                  {formatDateFull(allDates[0])}
                 </span>
-                <span className="text-xs text-muted-foreground">{r.date}</span>
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="history-page-btn"
+                  aria-label="Anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-medium text-foreground">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page === totalPages - 1}
+                  className="history-page-btn"
+                  aria-label="Siguiente"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-              <p className="font-bold text-foreground mt-1 truncate text-sm">{r.animal}</p>
-            </div>
-            <span className="text-2xl font-black text-secondary tabular-nums">
-              {r.number.toString().padStart(2, "0")}
-            </span>
-          </motion.div>
-        ))}
-      </div>
+            )}
 
-      {filtered.length === 0 && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center text-muted-foreground mt-8"
-        >
-          No se encontraron resultados.
-        </motion.p>
-      )}
+            {/* Responsive scroll container */}
+            <div className="history-table-scroll">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th className="history-th history-th-hour">Horario</th>
+                    {visibleDates.map((date) => (
+                      <th key={date} className="history-th history-th-date">
+                        <span className="block text-[10px] font-normal opacity-80">
+                          {getDayName(date)}
+                        </span>
+                        <span className="block text-xs font-bold">
+                          {date.substring(0, 7)}
+                        </span>
+                        <span className="block text-sm font-extrabold tracking-tight">
+                          {formatDateHeader(date)}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {HOURS_ORDER.map((hour, rowIdx) => (
+                    <tr
+                      key={hour}
+                      className={rowIdx % 2 === 0 ? "history-row-even" : "history-row-odd"}
+                    >
+                      <td className="history-td history-td-hour">{hour}</td>
+                      {visibleDates.map((date) => {
+                        const r = resultMap[date]?.[hour];
+                        const highlight = r && searchMatches(r.animal);
+                        const dimmed = searchLower && r && !searchMatches(r.animal);
+                        return (
+                          <td key={date} className="history-td history-td-cell">
+                            {r ? (
+                              <div
+                                className={`animal-cell ${dimmed ? "animal-cell-dim" : ""} ${highlight && searchLower ? "animal-cell-highlight" : ""}`}
+                                title={`${r.animal} · #${r.number.toString().padStart(2, "0")}`}
+                              >
+                                <div
+                                  className="animal-circle"
+                                  style={{ borderColor: getAnimalColor(r.animal) }}
+                                >
+                                  <span className="animal-emoji" role="img" aria-label={r.animal}>
+                                    {r.emoji}
+                                  </span>
+                                </div>
+                                <span className="animal-name">{r.animal}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </motion.div>
     </section>
   );
 };

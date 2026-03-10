@@ -1,32 +1,43 @@
 import { motion } from "framer-motion";
-import { PYRAMID_DATA, HOT_NUMBERS } from "@/data/mockData";
+import { PYRAMID_DATA } from "@/data/mockData";
 
-const BLOCK_STYLES = [
-  "bg-primary text-primary-foreground",
-  "bg-secondary text-secondary-foreground",
-  "bg-accent text-accent-foreground",
-];
+// Alternating yellow / green block colours matching the reference image
+const YELLOW = {
+  bg: "#f6c90e",
+  text: "#1a1a00",
+  shadow: "0 3px 8px rgba(246,201,14,0.45)",
+};
+const GREEN = {
+  bg: "#2d8c3e",
+  text: "#ffffff",
+  shadow: "0 3px 8px rgba(45,140,62,0.45)",
+};
 
 const container = {
   hidden: {},
   show: {
-    transition: { staggerChildren: 0.06, delayChildren: 0.3 },
+    transition: { staggerChildren: 0.04, delayChildren: 0.2 },
   },
 };
 
-const item = {
-  hidden: { scale: 0, opacity: 0, rotate: -15 },
+const blockAnim = {
+  hidden: { scale: 0, opacity: 0, y: -8 },
   show: {
     scale: 1,
     opacity: 1,
-    rotate: 0,
-    transition: { type: "spring" as const, stiffness: 300, damping: 20 },
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 280,
+      damping: 18,
+    },
   },
 };
 
 const PyramidSection = () => {
   return (
-    <section className="w-full py-12 px-4" aria-label="Números de la suerte">
+    <section className="w-full py-12 px-4" aria-label="La Pirámide de números">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -34,33 +45,41 @@ const PyramidSection = () => {
         transition={{ duration: 0.5 }}
         className="text-center mb-8"
       >
-        <h2 className="text-display-sm text-foreground mb-2">
-          Números de la Suerte
-        </h2>
-        <p className="text-sm text-muted-foreground">Predicción del día basada en patrones históricos</p>
+        <h2 className="text-display-sm text-foreground mb-2">La Pirámide</h2>
+        <p className="text-sm text-muted-foreground">
+          Números que irradian energía y suerte para hoy
+        </p>
         <div className="section-divider mt-4" />
       </motion.div>
 
+      {/* Pyramid — inverted triangle, widest row on top */}
       <motion.div
         variants={container}
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-30px" }}
-        className="flex flex-col items-center gap-2.5 md:gap-3"
+        className="flex flex-col items-center gap-[3px]"
       >
         {PYRAMID_DATA.map((row, rowIdx) => (
-          <div key={rowIdx} className="flex gap-2.5 md:gap-3">
-            {row.map((num, colIdx) => {
-              const isHot = HOT_NUMBERS.has(num);
-              const colorClass = BLOCK_STYLES[(rowIdx + colIdx) % BLOCK_STYLES.length];
+          <div key={rowIdx} className="flex gap-[3px]">
+            {row.map((digit, colIdx) => {
+              // Alternate yellow / green:  (rowIdx + colIdx) % 2 === 0 → yellow, else green
+              const isYellow = (rowIdx + colIdx) % 2 === 0;
+              const color = isYellow ? YELLOW : GREEN;
               return (
                 <motion.div
                   key={`${rowIdx}-${colIdx}`}
-                  variants={item}
-                  className={`pyramid-block w-[52px] h-[52px] md:w-[76px] md:h-[76px] lg:w-[96px] lg:h-[96px] text-base md:text-xl lg:text-2xl ${colorClass} ${isHot ? "ring-2 ring-secondary ring-offset-2 ring-offset-background" : ""}`}
-                  aria-label={`Número ${num}${isHot ? ", caliente" : ""}`}
+                  variants={blockAnim}
+                  whileHover={{ scale: 1.18, zIndex: 10 }}
+                  className="pyramid-lotto-block"
+                  style={{
+                    backgroundColor: color.bg,
+                    color: color.text,
+                    boxShadow: color.shadow,
+                  }}
+                  aria-label={`Dígito ${digit}`}
                 >
-                  {num}
+                  {digit}
                 </motion.div>
               );
             })}
@@ -68,15 +87,29 @@ const PyramidSection = () => {
         ))}
       </motion.div>
 
-      <motion.p
+      {/* Legend */}
+      <motion.div
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
-        transition={{ delay: 1 }}
-        className="text-center text-xs text-muted-foreground mt-6 italic"
+        transition={{ delay: 0.8 }}
+        className="flex items-center justify-center gap-4 mt-7"
       >
-        Los números con borde verde están "calientes" 🔥
-      </motion.p>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="inline-block w-4 h-4 rounded-sm"
+            style={{ background: YELLOW.bg, border: "1px solid #c9a50a" }}
+          />
+          Positivo
+        </span>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="inline-block w-4 h-4 rounded-sm"
+            style={{ background: GREEN.bg }}
+          />
+          Suerte
+        </span>
+      </motion.div>
     </section>
   );
 };
