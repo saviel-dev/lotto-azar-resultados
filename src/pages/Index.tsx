@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import LottoHeader from "@/components/LottoHeader";
+import ForecastTicker from "@/components/ForecastTicker";
 import HeroSection from "@/components/HeroSection";
 import PyramidSection from "@/components/PyramidSection";
 import HistorySection from "@/components/HistorySection";
@@ -28,18 +29,23 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <LottoHeader onToggleFilters={scrollToHistory} />
-      <main className="pt-[60px] md:pt-[72px]">
+      {/* Ticker de pronóstico fijo justo debajo del header */}
+      <div className="fixed left-0 right-0 z-40 top-[60px] md:top-[72px]">
+        <ForecastTicker />
+      </div>
+      {/* main con padding para header + ticker (~30px extra) */}
+      <main className="pt-[90px] md:pt-[106px]">
         <HeroSection result={latestResult} updatedAgo={updatedAgo} />
-        
+
         <div className="bg-card border-y border-border">
           <PyramidSection />
         </div>
-        
+
         <div ref={historyRef}>
           <HistorySection results={allResults} />
         </div>
       </main>
-      
+
       <Footer />
     </div>
   );

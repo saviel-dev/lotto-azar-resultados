@@ -34,7 +34,7 @@ const Footer = () => {
         <p className="text-xs text-muted-foreground text-center">
           © {year} <strong className="text-foreground font-semibold">Lotto Azar</strong>
           {" · "}Resultados con fines informativos
-          {" · "}Hecho con <Heart className="h-3 w-3 inline text-red-500 fill-red-500" /> en Venezuela
+          {" · "}Hecho con <Heart className="h-3 w-3 inline text-red-500 fill-red-500" /> para Colombia, Perú y Venezuela
         </p>
       </div>
     </motion.footer>
