@@ -1,42 +1,129 @@
-import { motion } from "framer-motion";
-import { LotteryResult } from "@/data/mockData";
-import TypewriterText from "@/components/TypewriterText";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ANIMALS, HOURS_LIST, type LotteryResult } from "@/data/mockData";
 
+/* ─── Helpers de tiempo ────────────────────────────────────────── */
+function hourStrToNum(hourStr: string): number {
+  const [timePart, period] = hourStr.split(" ");
+  let [h] = timePart.split(":").map(Number);
+  if (period === "PM" && h !== 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return h;
+}
+
+function animalForHour(hourStr: string): (typeof ANIMALS)[0] {
+  const idx = HOURS_LIST.indexOf(hourStr);
+  if (idx === -1) return ANIMALS[0];
+  return ANIMALS[(idx * 7 + 3) % ANIMALS.length];
+}
+
+function getCurrentHourIndex(): number {
+  const currentH = new Date().getHours();
+  let best = -1;
+  for (let i = 0; i < HOURS_LIST.length; i++) {
+    if (hourStrToNum(HOURS_LIST[i]) <= currentH) best = i;
+  }
+  return best === -1 ? 0 : best;
+}
+
+function secondsToNext(idx: number): number {
+  if (idx + 1 >= HOURS_LIST.length) return 0;
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hourStrToNum(HOURS_LIST[idx + 1]), 0, 0, 0);
+  return Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+}
+
+/* ─── Partículas flotantes ─────────────────────────────────────── */
+const LOTTERY_ICONS = ["🎰","🎲","💰","⭐","🌟","💫","🍀","🎯","🏆","💎","🃏","🎴","✨","🪙","🎊"];
+function seeded(n: number) { const x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); }
+const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
+  id: i,
+  icon: LOTTERY_ICONS[Math.floor(seeded(i) * LOTTERY_ICONS.length)],
+  x: seeded(i + 50) * 95,
+  y: seeded(i + 100) * 80,
+  size: `${1 + seeded(i + 150) * 1.2}rem`,
+  opacity: 0.2 + seeded(i + 200) * 0.4,
+  duration: 4 + seeded(i + 250) * 5,
+  delay: seeded(i + 300) * 4,
+  drift: 30 + seeded(i + 350) * 50,
+  rotate: seeded(i + 400) * 360 - 180,
+  spin: (seeded(i + 450) > 0.5 ? 1 : -1) * (20 + seeded(i + 500) * 60),
+}));
+
+/* ─── Props ────────────────────────────────────────────────────── */
 interface HeroSectionProps {
   result: LotteryResult;
   updatedAgo: number;
 }
 
-// Iconos relacionados con la lotería / suerte
-const LOTTERY_ICONS = ["🎰", "🎲", "💰", "⭐", "🌟", "💫", "🍀", "🎯", "🏆", "💎", "🃏", "🎴", "✨", "🪙", "🎊"];
+/* ════════════════════════════════════════════════════════════════
+   HeroSection — con ticker dinámico integrado
+═══════════════════════════════════════════════════════════════════ */
+const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
+  const [activeIdx, setActiveIdx] = useState(getCurrentHourIndex);
+  const [displayIdx, setDisplayIdx] = useState(getCurrentHourIndex);
+  const [transitioning, setTransitioning] = useState(false);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  const [countdown, setCountdown] = useState(() => secondsToNext(getCurrentHourIndex()));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-// Generador determinista para posiciones y tiempos de partículas
-function seeded(n: number): number {
-  const x = Math.sin(n * 9301 + 49297) * 233280;
-  return x - Math.floor(x);
-}
+  const transitionTo = useCallback(
+    (nextIdx: number, dir: "forward" | "back" = "forward") => {
+      if (transitioning) return;
+      setDirection(dir);
+      setTransitioning(true);
+      timerRef.current = setTimeout(() => {
+        setDisplayIdx(nextIdx);
+        setTransitioning(false);
+      }, 450);
+    },
+    [transitioning]
+  );
 
-const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
-  id: i,
-  icon: LOTTERY_ICONS[Math.floor(seeded(i) * LOTTERY_ICONS.length)],
-  x: seeded(i + 50) * 95,           // % horizontal (0–95)
-  y: seeded(i + 100) * 80,          // % vertical inicial (0–80)
-  size: `${1 + seeded(i + 150) * 1.4}rem`,   // 1–2.4rem
-  opacity: 0.25 + seeded(i + 200) * 0.45,    // 0.25–0.70
-  duration: 4 + seeded(i + 250) * 5,         // 4–9s
-  delay: seeded(i + 300) * 4,               // 0–4s delay inicial
-  drift: 30 + seeded(i + 350) * 50,          // px flotación vertical
-  rotate: seeded(i + 400) * 360 - 180,       // rotación inicial
-  spin: (seeded(i + 450) > 0.5 ? 1 : -1) * (20 + seeded(i + 500) * 60), // giro total
-}));
+  // Tick del reloj: auto-cambio + countdown
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newIdx = getCurrentHourIndex();
+      setCountdown(secondsToNext(newIdx));
+      setActiveIdx((prev) => {
+        if (newIdx !== prev) {
+          transitionTo(newIdx, "forward");
+          return newIdx;
+        }
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [transitionTo]);
 
-const HeroSection = ({ result, updatedAgo }: HeroSectionProps) => {
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const handleChipClick = (idx: number) => {
+    if (idx === displayIdx || transitioning) return;
+    transitionTo(idx, idx > displayIdx ? "forward" : "back");
+  };
+
+  const currentAnimal = animalForHour(HOURS_LIST[displayIdx]);
+  const isLive = displayIdx === activeIdx;
+  const mins = String(Math.floor(countdown / 60)).padStart(2, "0");
+  const secs = String(countdown % 60).padStart(2, "0");
+
+  // Variantes de animación framer-motion
+  const variants = {
+    enterForward:  { opacity: 0, x: 60,  scale: 0.88 },
+    enterBackward: { opacity: 0, x: -60, scale: 0.88 },
+    center:        { opacity: 1, x: 0,   scale: 1    },
+    exitForward:   { opacity: 0, x: -60, scale: 0.88 },
+    exitBackward:  { opacity: 0, x: 60,  scale: 0.88 },
+  };
+
   return (
     <section
-      className="w-full min-h-[42vh] flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden"
-      aria-label="Último resultado del sorteo"
+      className="w-full min-h-[54vh] flex flex-col items-center justify-center px-4 py-6 relative overflow-hidden"
+      aria-label="Resultado del sorteo en vivo"
     >
-      {/* Fondo difuminado — solo la imagen tiene blur, no el contenido */}
+      {/* ── Fondo ──────────────────────────────────────────────── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -44,17 +131,19 @@ const HeroSection = ({ result, updatedAgo }: HeroSectionProps) => {
           backgroundSize: "cover",
           backgroundPosition: "center",
           filter: "blur(6px)",
-          transform: "scale(1.06)", // evita bordes blancos del blur
+          transform: "scale(1.06)",
         }}
       />
-      {/* Overlay semitransparente para mejorar legibilidad */}
-      <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: "rgba(10, 20, 60, 0.68)" }} />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: "rgba(6, 14, 48, 0.80)" }}
+      />
 
-      {/* Partículas flotantes de lotería */}
+      {/* ── Partículas flotantes ────────────────────────────────── */}
       {PARTICLES.map((p) => (
         <motion.span
           key={p.id}
-          className="absolute pointer-events-none select-none z-5"
+          className="absolute pointer-events-none select-none z-[5]"
           style={{ left: `${p.x}%`, top: `${p.y}%`, fontSize: p.size }}
           initial={{ opacity: 0, y: 0, rotate: p.rotate }}
           animate={{
@@ -63,80 +152,221 @@ const HeroSection = ({ result, updatedAgo }: HeroSectionProps) => {
             rotate: [p.rotate, p.rotate + p.spin],
             scale: [0.7, 1, 1, 0.7],
           }}
-          transition={{
-            duration: p.duration,
-            delay: p.delay,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
+          transition={{ duration: p.duration, delay: p.delay, repeat: Infinity, ease: "easeInOut" }}
           aria-hidden="true"
         >
           {p.icon}
         </motion.span>
       ))}
 
-      {/* Decorative circles */}
-      <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-secondary/5 pointer-events-none" />
-      <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-primary/5 pointer-events-none" />
+      {/* ── Decorative circles ─────────────────────────────────── */}
+      <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-blue-500/5 pointer-events-none" />
+      <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-blue-300/5 pointer-events-none" />
 
-      <motion.div
-        initial={{ scale: 0.3, opacity: 0, rotate: -10 }}
-        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-        transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1], delay: 0.2 }}
-        className="relative z-10 text-[72px] md:text-[100px] lg:text-[120px] leading-none mb-3"
-        aria-hidden="true"
-      >
-        {result.emoji}
-      </motion.div>
+      {/* ══ Contenido principal ════════════════════════════════════ */}
+      <div className="relative z-10 flex flex-col items-center text-center w-full max-w-md">
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.5 }}
-        className="relative z-10 text-center"
-      >
-        <TypewriterText
-          text="¡GANADOR!"
-          speed={80}
-          delay={700}
-          className="text-2xl md:text-3xl lg:text-4xl font-black text-accent block"
-        />
-      </motion.div>
+        {/* Badge EN VIVO / Vista previa */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-2"
+        >
+          {isLive ? (
+            <span
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-white"
+              style={{
+                background: "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                boxShadow: "0 0 0 0 rgba(59,130,246,0.5)",
+                animation: "hpulse 2s infinite",
+              }}
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              En Vivo
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest text-white"
+              style={{ background: "linear-gradient(135deg,#6d28d9,#a855f7)" }}
+            >
+              👁 Vista previa
+            </span>
+          )}
+        </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 1.2 }}
-        className="relative z-10 text-center mt-2"
-      >
-        <p className="text-base md:text-lg font-semibold text-foreground/80 text-white">
-          Animal: <span className="text-foreground font-bold text-white">{result.animal}</span>
-        </p>
-      </motion.div>
+        {/* Hora del resultado */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-xs font-semibold tracking-widest uppercase mb-3"
+          style={{ color: "#93c5fd" }}
+        >
+          Resultado de las {HOURS_LIST[displayIdx]}
+        </motion.p>
 
-      <motion.p
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1], delay: 1.5 }}
-        className="relative z-10 text-5xl md:text-6xl lg:text-7xl font-black text-secondary mt-3 tabular-nums"
-      >
-        {result.number.toString().padStart(2, "0")}
-      </motion.p>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 2 }}
-        className="relative z-10 mt-4 flex flex-col items-center gap-3"
-      >
-        <span className="inline-flex items-center gap-2 rounded-full bg-card px-4 py-1.5 text-sm font-semibold text-foreground border border-border card-elevated">
-          🕐 {result.hour}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-secondary animate-pulse-dot" aria-hidden="true" />
-          <span>En vivo · Actualizado hace {updatedAgo} min</span>
+        {/* ── Emoji animado con transición ───────────────────────── */}
+        <div className="relative mb-3 w-24 h-24">
+          {/* Halo */}
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: "radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%)",
+              filter: "blur(12px)",
+              transform: "scale(1.4)",
+            }}
+          />
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={displayIdx}
+              custom={direction}
+              variants={variants}
+              initial={direction === "forward" ? "enterForward" : "enterBackward"}
+              animate="center"
+              exit={direction === "forward" ? "exitForward" : "exitBackward"}
+              transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <div
+                className="w-24 h-24 rounded-full flex items-center justify-center"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1.5px solid rgba(255,255,255,0.10)",
+                  boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+                }}
+              >
+                <motion.span
+                  className="text-5xl leading-none select-none"
+                  animate={{ y: [0, -6, 0] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  role="img"
+                  aria-label={currentAnimal.name}
+                >
+                  {currentAnimal.emoji}
+                </motion.span>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
-      </motion.div>
+
+        {/* Nombre y número */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`info-${displayIdx}`}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+          >
+            <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight mb-0.5">
+              {currentAnimal.name}
+            </h1>
+            <p className="text-3xl md:text-4xl font-black tabular-nums mt-1"
+              style={{ color: "#fbbf24" }}>
+              {currentAnimal.number}
+            </p>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Countdown al próximo sorteo */}
+        {isLive && activeIdx < HOURS_LIST.length - 1 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mt-3 flex items-center gap-2 px-4 py-1.5 rounded-full"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-xs font-medium" style={{ color: "#cbd5e1" }}>Próximo en</span>
+            <span className="text-sm font-bold font-mono" style={{ color: "#fbbf24" }}>
+              {mins}:{secs}
+            </span>
+          </motion.div>
+        )}
+
+        {/* "Actualizado hace X min" */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="mt-2 flex items-center gap-1.5 text-xs"
+          style={{ color: "#64748b" }}
+        >
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>En vivo · Actualizado hace {updatedAgo} min</span>
+        </motion.div>
+
+        {/* ── Chips de horarios ───────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+          className="mt-5 w-full"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-widest mb-3"
+            style={{ color: "#60a5fa" }}>
+            Horarios del día
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {HOURS_LIST.map((h, i) => {
+              const isSelected = i === displayIdx;
+              const isCovered = i <= activeIdx;
+              const isPreview = isSelected && !isLive;
+
+              let bg = "rgba(255,255,255,0.05)";
+              let color = "#475569";
+              let border = "1px solid rgba(255,255,255,0.08)";
+              let shadow = "none";
+              let scale = "scale(1)";
+
+              if (isPreview) {
+                bg = "linear-gradient(135deg,#6d28d9,#a855f7)";
+                color = "#fff";
+                border = "1px solid transparent";
+                shadow = "0 4px 12px rgba(124,58,237,0.4)";
+                scale = "scale(1.08)";
+              } else if (isSelected) {
+                bg = "linear-gradient(135deg,#1e40af,#3b82f6)";
+                color = "#fff";
+                border = "1px solid transparent";
+                shadow = "0 4px 14px rgba(59,130,246,0.45)";
+                scale = "scale(1.08)";
+              } else if (isCovered) {
+                bg = "rgba(20,83,45,0.35)";
+                color = "#4ade80";
+                border = "1px solid rgba(74,222,128,0.25)";
+              }
+
+              return (
+                <button
+                  key={h}
+                  onClick={() => handleChipClick(i)}
+                  disabled={transitioning || !isCovered}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  style={{ background: bg, color, border, boxShadow: shadow, transform: scale }}
+                >
+                  {h.replace(":00", "")}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-center text-[10px] mt-3" style={{ color: "#334155" }}>
+            Toca cualquier hora para previsualizar su resultado
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Keyframes inline */}
+      <style>{`
+        @keyframes hpulse {
+          0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.45); }
+          50%      { box-shadow: 0 0 0 10px rgba(59,130,246,0); }
+        }
+      `}</style>
     </section>
   );
 };

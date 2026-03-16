@@ -24,7 +24,7 @@ const Index = () => {
     historyRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const latestResult = allResults[0];
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,7 +35,7 @@ const Index = () => {
       </div>
       {/* main con padding para header + ticker (~30px extra) */}
       <main className="pt-[90px] md:pt-[106px]">
-        <HeroSection result={latestResult} updatedAgo={updatedAgo} />
+        <HeroSection updatedAgo={updatedAgo} />
 
         <div className="bg-card border-y border-border">
           <PyramidSection />
