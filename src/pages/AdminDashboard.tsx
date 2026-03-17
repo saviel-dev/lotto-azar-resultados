@@ -30,6 +30,7 @@ import {
   Bell,
   Clock,
   CircleCheckBig,
+  Menu,
 } from "lucide-react";
 import {
   PYRAMID_DATA,
@@ -79,15 +80,64 @@ const activityLog = [
 ];
 
 const SectionDashboard = () => {
-  const allResults = generateResults();
-  const latest = allResults.slice(0, 6);
-  const totalDigits = PYRAMID_DATA.reduce((acc, row) => acc + row.length, 0);
-  const today = allResults.filter((r) => r.date === allResults[0].date);
+  const [stats, setStats] = useState({
+    totalResults: 0,
+    todayResults: 0,
+    latest: [] as any[],
+    pyramidDigits: 0,
+    isLoading: true
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const fetchDashboardData = async () => {
+      try {
+        let pDigits = PYRAMID_DATA.reduce((acc, row) => acc + row.length, 0);
+        const { data: pData } = await supabase.from("pyramid").select("data").eq("id", 1).single();
+        if (pData?.data) {
+          pDigits = pData.data.reduce((acc: number, row: any[]) => acc + row.length, 0);
+        }
+
+        const { count: totalCount } = await supabase
+          .from("sorteos")
+          .select("*", { count: "exact", head: true });
+
+        const { data: latestData } = await supabase
+          .from("sorteos")
+          .select("*")
+          .order("fecha", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(6);
+
+        const mDate = new Date();
+        const year = mDate.getFullYear();
+        const month = String(mDate.getMonth() + 1).padStart(2, "0");
+        const day = String(mDate.getDate()).padStart(2, "0");
+        const todayStr = `${year}-${month}-${day}`;
+
+        const { count: todayCount } = await supabase
+          .from("sorteos")
+          .select("*", { count: "exact", head: true })
+          .eq("fecha", todayStr);
+
+        setStats({
+          totalResults: totalCount || 0,
+          todayResults: todayCount || 0,
+          latest: latestData || [],
+          pyramidDigits: pDigits,
+          isLoading: false
+        });
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+        setStats(prev => ({ ...prev, isLoading: false }));
+      }
+    };
+    fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || stats.isLoading) return;
 
     // Animate stats cards
     anime({
@@ -99,6 +149,8 @@ const SectionDashboard = () => {
       easing: 'easeOutQuad'
     });
 
+
+
     // Animate tables/lists
     anime({
       targets: '.dashboard-list-item',
@@ -108,13 +160,13 @@ const SectionDashboard = () => {
       duration: 400,
       easing: 'easeOutSine'
     });
-  }, []);
+  }, [stats.isLoading]);
 
   const vals = [
-    { label: "Resultados Registrados", value: allResults.length.toString(), sub: `${today.length} hoy` },
+    { label: "Resultados Registrados", value: stats.totalResults.toString(), sub: `${stats.todayResults} hoy` },
     { label: "Animales en Sistema", value: ANIMALS.length.toString(), sub: "catálogo completo" },
     { label: "Franjas Horarias", value: HOURS_LIST.length.toString(), sub: "sorteos por día" },
-    { label: "Dígitos en Pirámide", value: totalDigits.toString(), sub: `${PYRAMID_DATA.length} filas` },
+    { label: "Dígitos en Pirámide", value: stats.pyramidDigits.toString(), sub: `${PYRAMID_DATA.length} filas` },
   ];
 
   return (
@@ -129,7 +181,9 @@ const SectionDashboard = () => {
         {/* Card 1 */}
         <div className="stat-card opacity-0 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-5 flex-1 relative flex flex-col justify-center">
-            <h3 className="text-3xl font-extrabold text-blue-600 z-10 tracking-tight">{vals[0].value}</h3>
+            <h3 className="stat-value text-3xl font-extrabold text-blue-600 z-10 tracking-tight" data-value={vals[0].value}>
+              {vals[0].value}
+            </h3>
             <p className="mt-1 text-sm text-gray-500 font-medium z-10">{vals[0].label}</p>
             <div className="absolute top-5 right-5 text-gray-100 z-0">
               <Trophy className="h-10 w-10" strokeWidth={1.5} />
@@ -149,7 +203,9 @@ const SectionDashboard = () => {
         {/* Card 2 */}
         <div className="stat-card opacity-0 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-5 flex-1 relative flex flex-col justify-center">
-            <h3 className="text-3xl font-extrabold text-orange-600 z-10 tracking-tight">{vals[1].value}</h3>
+            <h3 className="stat-value text-3xl font-extrabold text-orange-600 z-10 tracking-tight" data-value={vals[1].value}>
+              {vals[1].value}
+            </h3>
             <p className="mt-1 text-sm text-gray-500 font-medium z-10">{vals[1].label}</p>
             <div className="absolute top-5 right-5 text-gray-100 z-0">
               <Users className="h-10 w-10" strokeWidth={1.5} />
@@ -169,7 +225,9 @@ const SectionDashboard = () => {
         {/* Card 3 */}
         <div className="stat-card opacity-0 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-5 flex-1 relative flex flex-col justify-center">
-            <h3 className="text-3xl font-extrabold text-[#47a84e] z-10 tracking-tight">{vals[2].value}</h3>
+            <h3 className="stat-value text-3xl font-extrabold text-[#47a84e] z-10 tracking-tight" data-value={vals[2].value}>
+              {vals[2].value}
+            </h3>
             <p className="mt-1 text-sm text-gray-500 font-medium z-10">{vals[2].label}</p>
             <div className="absolute top-5 right-5 text-gray-100 z-0">
               <Activity className="h-10 w-10" strokeWidth={1.5} />
@@ -189,7 +247,9 @@ const SectionDashboard = () => {
         {/* Card 4 */}
         <div className="stat-card opacity-0 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-5 flex-1 relative flex flex-col justify-center">
-            <h3 className="text-3xl font-extrabold text-[#f39c12] z-10 tracking-tight">{vals[3].value}</h3>
+            <h3 className="stat-value text-3xl font-extrabold text-[#f39c12] z-10 tracking-tight" data-value={vals[3].value}>
+              {vals[3].value}
+            </h3>
             <p className="mt-1 text-sm text-gray-500 font-medium z-10">{vals[3].label}</p>
             <div className="absolute top-5 right-5 text-gray-100 z-0">
               <Bell className="h-10 w-10" strokeWidth={1.5} />
@@ -213,9 +273,14 @@ const SectionDashboard = () => {
         <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 bg-blue-600 rounded-t-2xl">
             <h3 className="font-semibold text-white text-sm">ÚLtimos Resultados</h3>
-            <span className="text-xs text-blue-100 font-medium">{latest.length} registros</span>
+            <span className="text-xs text-blue-100 font-medium">{stats.latest.length} registros</span>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto relative">
+            {stats.isLoading && (
+              <div className="absolute inset-0 bg-white/60 z-10 flex flex-col justify-center items-center backdrop-blur-[1px]">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#1f5650] text-xs text-white uppercase tracking-wider border-b border-[#1f5650]">
@@ -226,12 +291,12 @@ const SectionDashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {latest.map((r) => (
+                {stats.latest.map((r) => (
                   <tr key={r.id} className="dashboard-list-item opacity-0 hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.date}</td>
-                    <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.hour}</td>
+                    <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.fecha}</td>
+                    <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.hora}</td>
                     <td className="px-5 py-3 font-medium text-gray-800">{r.emoji} {r.animal}</td>
-                    <td className="px-5 py-3 font-bold text-blue-600">{r.number}</td>
+                    <td className="px-5 py-3 font-bold text-blue-600">{String(r.numero).padStart(2, "0")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1490,6 +1555,7 @@ const SectionHistorial = () => {
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!sessionStorage.getItem("adminAuth")) {
@@ -1652,18 +1718,86 @@ const AdminDashboard = () => {
         }
       `}</style>
 
-      <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-        {/* ── Sidebar ───────────────────────────────────────────── */}
-        <aside className="w-56 flex-shrink-0 flex flex-col bg-[#1a1f37] text-white">
+      <div className="flex flex-col md:flex-row h-screen bg-gray-50 font-sans overflow-hidden relative">
+        {/* ── Mobile Header ───────────────────────────────────── */}
+        <div className="md:hidden flex items-center justify-between bg-[#1a1f37] px-5 py-4 text-white z-40 relative">
+          <div>
+            <span className="text-xl font-bold tracking-tight text-white flex items-center gap-1">
+              Lotto <span className="text-blue-400">Azar</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={startTour}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+            >
+              <span>🗺️</span>
+              <span>Tour</span>
+            </button>
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white"
+            >
+              {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Mobile Dropdown Menu ────────────────────────────── */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-[68px] left-0 right-0 bg-[#1a1f37] z-50 border-t border-white/10 shadow-2xl flex flex-col h-[calc(100vh-68px)] animate-in slide-in-from-top-2 duration-200">
+             <nav className="flex-1 py-4 overflow-y-auto">
+                <p className="px-5 text-xs text-white/40 uppercase tracking-widest mb-3 font-semibold">Módulos</p>
+                {navItems.map(({ id, icon: Icon, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => { setActiveSection(id); setIsMobileMenuOpen(false); }}
+                    className={`flex items-center w-full px-5 py-3.5 text-base transition-colors ${
+                      activeSection === id
+                        ? "bg-blue-600/20 text-blue-400 font-semibold border-l-4 border-blue-500"
+                        : "text-white/70 hover:bg-white/5 hover:text-white border-l-4 border-transparent"
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 flex-shrink-0 mr-3 ${activeSection === id ? "text-blue-400" : "text-white/50"}`} />
+                    {label}
+                  </button>
+                ))}
+             </nav>
+             <div className="p-5 border-t border-white/10 bg-[#121629]">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold text-white shadow-md">
+                    A
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Administrador</p>
+                    <p className="text-xs text-white/40">whpj6436@gmail.com</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    sessionStorage.removeItem("adminAuth");
+                    navigate("/");
+                  }}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
+             </div>
+          </div>
+        )}
+
+        {/* ── Desktop Sidebar ───────────────────────────────────────────── */}
+        <aside className="hidden md:flex w-64 flex-shrink-0 flex-col bg-[#1a1f37] text-white z-30 shadow-xl overflow-hidden">
           {/* Logo + Tour button */}
-          <div className="px-5 py-5 border-b border-white/10">
-            <div className="flex items-start justify-between gap-2">
+          <div className="px-6 py-6 border-b border-white/10 relative">
+            <div className="flex items-start justify-between gap-3 relative z-10">
               <div>
-                <span className="text-xl font-bold tracking-tight text-white">
+                <span className="text-2xl font-bold tracking-tight text-white flex items-center gap-1.5">
                   Lotto <span className="text-blue-400">Azar</span>
                 </span>
-                <p className="text-[10px] text-white/40 mt-0.5 uppercase tracking-widest">
-                  Admin Panel
+                <p className="text-[11px] text-white/50 mt-1 uppercase tracking-widest font-semibold">
+                  Panel de Control
                 </p>
               </div>
               {/* Tour button */}
@@ -1671,48 +1805,52 @@ const AdminDashboard = () => {
                 id="tour-btn"
                 onClick={startTour}
                 title="Tour del panel"
-                className="flex-shrink-0 mt-0.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-sm"
+                className="flex-shrink-0 mt-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-md"
               >
                 <span>🗺️</span>
                 <span>Tour</span>
               </button>
             </div>
+            {/* Soft glow effect for logo area */}
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/10 to-transparent pointer-events-none" />
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 py-4 overflow-y-auto">
-            <p className="px-5 text-[10px] text-white/30 uppercase tracking-widest mb-2">
+          <nav className="flex-1 py-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <p className="px-6 text-[11px] text-white/40 uppercase tracking-widest mb-3 font-semibold">
               Módulos
             </p>
-            {navItems.map(({ id, icon: Icon, label }) => (
-              <button
-                key={id}
-                id={`tour-${id}`}
-                onClick={() => setActiveSection(id)}
-                className={`flex items-center gap-3 w-full px-5 py-2.5 text-sm transition-colors ${
-                  activeSection === id
-                    ? "bg-blue-600 text-white font-medium"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {label}
-                {activeSection === id && (
-                  <ChevronRight className="h-3 w-3 ml-auto" />
-                )}
-              </button>
-            ))}
+            <div className="space-y-1.5 px-4">
+              {navItems.map(({ id, icon: Icon, label }) => (
+                <button
+                  key={id}
+                  id={`tour-${id}`}
+                  onClick={() => setActiveSection(id)}
+                  className={`flex items-center gap-3.5 w-full px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
+                    activeSection === id
+                      ? "bg-blue-600 text-white font-medium shadow-md shadow-blue-900/40"
+                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 flex-shrink-0 ${activeSection === id ? "text-white" : "text-white/50"}`} />
+                  {label}
+                  {activeSection === id && (
+                    <ChevronRight className="h-3.5 w-3.5 ml-auto opacity-70" />
+                  )}
+                </button>
+              ))}
+            </div>
           </nav>
 
           {/* User + logout */}
-          <div className="p-4 border-t border-white/10">
-            <div className="flex items-center gap-3 mb-3 px-1">
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+          <div className="p-5 border-t border-white/10 bg-[#121629]">
+            <div className="flex items-center gap-3 mb-4 px-1">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-sm font-bold shadow-md">
                 A
               </div>
-              <div>
-                <p className="text-xs font-medium text-white">Admin</p>
-                <p className="text-[10px] text-white/40">whpj6436@gmail.com</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">Admin</p>
+                <p className="text-[11px] text-white/40 truncate">whpj6436@gmail.com</p>
               </div>
             </div>
             <button
@@ -1720,7 +1858,7 @@ const AdminDashboard = () => {
                 sessionStorage.removeItem("adminAuth");
                 navigate("/");
               }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-medium text-white/70 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-xl transition-colors"
             >
               <LogOut className="h-3.5 w-3.5" />
               Cerrar sesión
@@ -1729,7 +1867,7 @@ const AdminDashboard = () => {
         </aside>
 
         {/* ── Main ──────────────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative bg-gray-50 flex flex-col min-w-0">
           {renderSection()}
         </main>
       </div>
