@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ANIMALS, HOURS_LIST, type LotteryResult } from "@/data/mockData";
+import { HOURS_LIST } from "@/data/mockData";
+import { useSorteos } from "@/hooks/useSorteos";
 
 /* ─── Helpers de tiempo ────────────────────────────────────────── */
 function hourStrToNum(hourStr: string): number {
@@ -11,12 +12,6 @@ function hourStrToNum(hourStr: string): number {
   return h;
 }
 
-function animalForHour(hourStr: string): (typeof ANIMALS)[0] {
-  const idx = HOURS_LIST.indexOf(hourStr);
-  if (idx === -1) return ANIMALS[0];
-  return ANIMALS[(idx * 7 + 3) % ANIMALS.length];
-}
-
 function getCurrentHourIndex(): number {
   const currentH = new Date().getHours();
   let best = -1;
@@ -24,6 +19,10 @@ function getCurrentHourIndex(): number {
     if (hourStrToNum(HOURS_LIST[i]) <= currentH) best = i;
   }
   return best === -1 ? 0 : best;
+}
+
+function getTodayStr(): string {
+  return new Date().toISOString().split("T")[0];
 }
 
 function secondsToNext(idx: number): number {
@@ -53,12 +52,11 @@ const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
 
 /* ─── Props ────────────────────────────────────────────────────── */
 interface HeroSectionProps {
-  result: LotteryResult;
   updatedAgo: number;
 }
 
 /* ════════════════════════════════════════════════════════════════
-   HeroSection — con ticker dinámico integrado
+   HeroSection — muestra el resultado real del sorteo de cada hora
 ═══════════════════════════════════════════════════════════════════ */
 const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const [activeIdx, setActiveIdx] = useState(getCurrentHourIndex);
@@ -67,6 +65,22 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [countdown, setCountdown] = useState(() => secondsToNext(getCurrentHourIndex()));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Datos reales de sorteos
+  const { results, loading } = useSorteos();
+  const today = getTodayStr();
+
+  /** Busca el resultado real para la hora mostrada. Si no existe, retorna null. */
+  const getResult = useCallback(
+    (idx: number) => {
+      const hour = HOURS_LIST[idx];
+      return results.find((r) => r.date === today && r.hour === hour) ?? null;
+    },
+    [results, today]
+  );
+
+  const displayResult = getResult(displayIdx);
+  const isLive = displayIdx === activeIdx;
 
   const transitionTo = useCallback(
     (nextIdx: number, dir: "forward" | "back" = "forward") => {
@@ -104,8 +118,6 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
     transitionTo(idx, idx > displayIdx ? "forward" : "back");
   };
 
-  const currentAnimal = animalForHour(HOURS_LIST[displayIdx]);
-  const isLive = displayIdx === activeIdx;
   const mins = String(Math.floor(countdown / 60)).padStart(2, "0");
   const secs = String(countdown % 60).padStart(2, "0");
 
@@ -120,7 +132,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
 
   return (
     <section
-      className="w-full min-h-[54vh] flex flex-col items-center justify-center px-4 py-6 relative overflow-hidden"
+      className="w-full min-h-[46vh] sm:min-h-[54vh] flex flex-col items-center justify-center px-3 sm:px-4 py-4 sm:py-6 relative overflow-hidden"
       aria-label="Resultado del sorteo en vivo"
     >
       {/* ── Fondo ──────────────────────────────────────────────── */}
@@ -164,7 +176,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
       <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-blue-300/5 pointer-events-none" />
 
       {/* ══ Contenido principal ════════════════════════════════════ */}
-      <div className="relative z-10 flex flex-col items-center text-center w-full max-w-md">
+      <div className="relative z-10 flex flex-col items-center text-center w-full max-w-md px-1">
 
         {/* Badge EN VIVO / Vista previa */}
         <motion.div
@@ -206,7 +218,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
         </motion.p>
 
         {/* ── Emoji animado con transición ───────────────────────── */}
-        <div className="relative mb-3 w-24 h-24">
+        <div className="relative mb-2 sm:mb-3 w-20 h-20 sm:w-24 sm:h-24">
           {/* Halo */}
           <div
             className="absolute inset-0 rounded-full"
@@ -228,22 +240,26 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
               className="absolute inset-0 flex items-center justify-center"
             >
               <div
-                className="w-24 h-24 rounded-full flex items-center justify-center"
+                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center"
                 style={{
                   background: "rgba(255,255,255,0.04)",
                   border: "1.5px solid rgba(255,255,255,0.10)",
                   boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
                 }}
               >
-                <motion.span
-                  className="text-5xl leading-none select-none"
-                  animate={{ y: [0, -6, 0] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                  role="img"
-                  aria-label={currentAnimal.name}
-                >
-                  {currentAnimal.emoji}
-                </motion.span>
+                {loading ? (
+                  <div className="w-8 h-8 rounded-full border-2 border-blue-400/50 border-t-blue-400 animate-spin" />
+                ) : (
+                  <motion.span
+                    className="text-4xl sm:text-5xl leading-none select-none"
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    role="img"
+                    aria-label={displayResult?.animal ?? "Sin resultado"}
+                  >
+                    {displayResult?.emoji ?? "❓"}
+                  </motion.span>
+                )}
               </div>
             </motion.div>
           </AnimatePresence>
@@ -252,19 +268,38 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
         {/* Nombre y número */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={`info-${displayIdx}`}
+            key={`info-${displayIdx}-${displayResult?.id ?? "none"}`}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
           >
-            <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight mb-0.5">
-              {currentAnimal.name}
-            </h1>
-            <p className="text-3xl md:text-4xl font-black tabular-nums mt-1"
-              style={{ color: "#fbbf24" }}>
-              {currentAnimal.number}
-            </p>
+            {loading ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="h-7 w-32 bg-white/10 rounded-lg animate-pulse" />
+                <div className="h-9 w-16 bg-white/10 rounded-lg animate-pulse" />
+              </div>
+            ) : displayResult ? (
+              <>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight mb-0.5">
+                  {displayResult.animal}
+                </h1>
+                <p className="text-2xl sm:text-3xl md:text-4xl font-black tabular-nums mt-1"
+                  style={{ color: "#fbbf24" }}>
+                  {String(displayResult.number).padStart(2, "0")}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight mb-0.5"
+                  style={{ color: "rgba(255,255,255,0.35)" }}>
+                  Sin resultado
+                </h1>
+                <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  Aún no se ha publicado
+                </p>
+              </>
+            )}
           </motion.div>
         </AnimatePresence>
 
@@ -305,14 +340,15 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
-          className="mt-5 w-full"
+          className="mt-4 sm:mt-5 w-full"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-widest mb-3"
+          <p className="text-[10px] font-semibold uppercase tracking-widest mb-2"
             style={{ color: "#60a5fa" }}>
             Horarios del día
           </p>
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="flex overflow-x-auto sm:flex-wrap sm:justify-center gap-2 pb-1 sm:pb-0 hero-chips-scroll">
             {HOURS_LIST.map((h, i) => {
+              const hasResult = !!getResult(i);
               const isSelected = i === displayIdx;
               const isCovered = i <= activeIdx;
               const isPreview = isSelected && !isLive;
@@ -335,10 +371,16 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
                 border = "1px solid transparent";
                 shadow = "0 4px 14px rgba(59,130,246,0.45)";
                 scale = "scale(1.08)";
-              } else if (isCovered) {
+              } else if (isCovered && hasResult) {
+                // Hora pasada CON resultado real → verde
                 bg = "rgba(20,83,45,0.35)";
                 color = "#4ade80";
                 border = "1px solid rgba(74,222,128,0.25)";
+              } else if (isCovered) {
+                // Hora pasada SIN resultado → gris/naranja
+                bg = "rgba(120,53,15,0.25)";
+                color = "#fb923c";
+                border = "1px solid rgba(251,146,60,0.2)";
               }
 
               return (
@@ -346,16 +388,17 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
                   key={h}
                   onClick={() => handleChipClick(i)}
                   disabled={transitioning || !isCovered}
-                  className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   style={{ background: bg, color, border, boxShadow: shadow, transform: scale }}
+                  title={hasResult ? "Resultado publicado" : isCovered ? "Sin resultado" : "Próximamente"}
                 >
                   {h.replace(":00", "")}
                 </button>
               );
             })}
           </div>
-          <p className="text-center text-[10px] mt-3" style={{ color: "#334155" }}>
-            Toca cualquier hora para previsualizar su resultado
+          <p className="text-center text-[10px] mt-2" style={{ color: "#334155" }}>
+            Toca cualquier hora para previsualizar
           </p>
         </motion.div>
       </div>

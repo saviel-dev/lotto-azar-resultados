@@ -1,5 +1,7 @@
 import { motion } from "framer-motion";
 import { PYRAMID_DATA } from "@/data/mockData";
+import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 
 // Alternating yellow / green block colours matching the reference image
 const YELLOW = {
@@ -35,6 +37,32 @@ const blockAnim = {
 };
 
 const PyramidSection = () => {
+  const [pyramidData, setPyramidData] = useState<number[][]>(PYRAMID_DATA);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPyramid = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pyramid")
+          .select("data")
+          .eq("id", 1)
+          .single();
+
+        if (error) throw error;
+        if (data && data.data) {
+          setPyramidData(data.data);
+        }
+      } catch (err) {
+        console.error("Error fetching pyramid:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPyramid();
+  }, []);
+
   return (
     <section className="w-full py-12 px-4" aria-label="La Pirámide de números">
       {/* Header */}
@@ -60,7 +88,7 @@ const PyramidSection = () => {
         viewport={{ once: true, margin: "-30px" }}
         className="flex flex-col items-center gap-[3px]"
       >
-        {PYRAMID_DATA.map((row, rowIdx) => (
+        {pyramidData.map((row, rowIdx) => (
           <div key={rowIdx} className="flex gap-[3px]">
             {row.map((digit, colIdx) => {
               // Alternate yellow / green:  (rowIdx + colIdx) % 2 === 0 → yellow, else green
@@ -71,7 +99,7 @@ const PyramidSection = () => {
                   key={`${rowIdx}-${colIdx}`}
                   variants={blockAnim}
                   whileHover={{ scale: 1.18, zIndex: 10 }}
-                  className="pyramid-lotto-block"
+                  className={`pyramid-lotto-block ${isLoading ? 'animate-pulse opacity-80' : ''}`}
                   style={{
                     backgroundColor: color.bg,
                     color: color.text,

@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { animate, stagger } from "animejs";
 import { sileo } from "sileo";
+import { driver } from "driver.js";
+import "driver.js/dist/driver.css";
 
 // Backwards compatibility layer for AnimeJS v3 usage pattern
 const anime = Object.assign((options: any) => {
@@ -36,6 +38,7 @@ import {
   generateResults,
   type LotteryResult,
 } from "@/data/mockData";
+import { supabase } from "@/lib/supabase";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 const YELLOW = { bg: "#f6c90e", text: "#1a1a00" };
@@ -85,7 +88,7 @@ const SectionDashboard = () => {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    
+
     // Animate stats cards
     anime({
       targets: '.stat-card',
@@ -268,15 +271,40 @@ const SectionDashboard = () => {
    Sección 1 – Pirámide
 ══════════════════════════════════════════════════════════════════ */
 const SectionPiramide = () => {
-  const [pyramid, setPyramid] = useState<(number | string)[][]>(
-    PYRAMID_DATA.map((row) => [...row])
-  );
+  const [pyramid, setPyramid] = useState<(number | string)[][]>([]);
   const [editing, setEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const fetchPyramid = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pyramid")
+          .select("data")
+          .eq("id", 1)
+          .single();
+
+        if (error) throw error;
+        if (data && data.data) {
+          setPyramid(data.data);
+        } else {
+          setPyramid(PYRAMID_DATA.map((row) => [...row]));
+        }
+      } catch (err) {
+        console.error("Error fetching pyramid:", err);
+        setPyramid(PYRAMID_DATA.map((row) => [...row]));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPyramid();
+  }, []);
+
+  useEffect(() => {
     if (!containerRef.current) return;
-    
+
     // Animate the row containers sequentially from bottom to top
     // Alternatively, animate the cells staggering from the top
     anime({
@@ -321,28 +349,51 @@ const SectionPiramide = () => {
           <p className="text-sm text-gray-500">Edita los dígitos de la pirámide invertida</p>
         </div>
         <button
-          onClick={() => {
+          onClick={async () => {
             if (editing) {
               const hasEmpty = pyramid.some(row => row.some(cell => cell === ""));
               if (hasEmpty) {
-                sileo.error({ 
+                sileo.error({
                   title: "Error de validación",
-                  description: "Ningún campo puede estar vacío antes de guardar.", 
-                  duration: 1500 
+                  description: "Ningún campo puede estar vacío antes de guardar.",
+                  duration: 1500
                 });
                 return;
               }
-              sileo.success({ 
-                title: "Cambios Guardados",
-                description: "Pirámide actualizada con éxito en la base de datos.",
-                duration: 1500 
-              });
+
+              try {
+                const cleanData = pyramid.map(row =>
+                  row.map(cell => typeof cell === "string" ? parseInt(cell) || 0 : Number(cell))
+                );
+
+                const { data: success, error } = await supabase.rpc("update_pyramid", {
+                  new_data: cleanData,
+                });
+
+                if (error) throw error;
+                if (!success) throw new Error("No rows updated");
+
+                sileo.success({
+                  title: "Cambios Guardados",
+                  description: "Pirámide actualizada con éxito en la base de datos.",
+                  duration: 1500
+                });
+                setEditing(false);
+              } catch (err) {
+                console.error("Error saving pyramid:", err);
+                sileo.error({
+                  title: "Error",
+                  description: "No se pudo guardar la pirámide en la base de datos.",
+                  duration: 2000
+                });
+              }
+            } else {
+              setEditing(true);
             }
-            setEditing((e) => !e);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${editing
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
+            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+            : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
         >
           {editing ? <Save className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
@@ -350,7 +401,12 @@ const SectionPiramide = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        )}
         <div className="flex flex-col items-center gap-1">
           {pyramid.map((row, rowIdx) => (
             <div key={rowIdx} className="flex gap-1">
@@ -416,36 +472,68 @@ const blankForecastForm = () => ({
 });
 
 const SectionPronosticos = () => {
-  const [forecasts, setForecasts] = useState<Forecast[]>(seedForecasts());
+  const [forecasts, setForecasts] = useState<Forecast[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(blankForecastForm());
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Fetch from Supabase ───────────────────────────────────────
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    // Animate prediction list items
+    const fetchForecasts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pronosticos")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        const mapped: Forecast[] = (data ?? []).map((row: any) => ({
+          id: row.id,
+          hora: row.hora,
+          loteria: row.loteria,
+          animal: row.animal,
+          numero: row.numero,
+        }));
+
+        mapped.sort((a, b) => HOURS_LIST.indexOf(a.hora) - HOURS_LIST.indexOf(b.hora));
+        setForecasts(mapped);
+      } catch (err) {
+        console.error("Error fetching pronosticos:", err);
+        setForecasts([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchForecasts();
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || forecasts.length === 0) return;
+
     anime({
       targets: '.pronostico-item',
       translateX: [-20, 0],
       opacity: [0, 1],
-      delay: anime.stagger(40, { start: 150 }),
+      delay: anime.stagger(40, { start: 50 }),
       duration: 400,
       easing: 'easeOutQuart'
     });
 
-    // Animate hours list items
     anime({
       targets: '.horario-item',
       translateX: [20, 0],
       opacity: [0, 1],
-      delay: anime.stagger(30, { start: 250 }),
+      delay: anime.stagger(30, { start: 100 }),
       duration: 350,
       easing: 'easeOutQuart'
     });
-  }, []);
+  }, [forecasts]);
 
   const coveredHours = new Set(forecasts.map((f) => f.hora));
   const missingHours = HOURS_LIST.filter((h) => !coveredHours.has(h));
@@ -467,38 +555,63 @@ const SectionPronosticos = () => {
     setEditId(null);
   };
 
-  const saveModal = () => {
-    if (editId !== null) {
-      setForecasts((prev) =>
-        prev.map((f) => (f.id === editId ? { ...f, ...form } : f))
-      );
-      sileo.success({ title: "Pronóstico Actualizado", description: "Se ha modificado correctamente.", duration: 2000 });
-    } else {
-      const alreadyCovered = forecasts.some((f) => f.hora === form.hora);
-      if (alreadyCovered) {
-        // overwrite existing
-        setForecasts((prev) =>
-          prev.map((f) =>
-            f.hora === form.hora ? { ...f, loteria: form.loteria, animal: form.animal, numero: form.numero } : f
-          )
-        );
-        sileo.success({ title: "Pronóstico Actualizado", description: "El pronóstico existente ha sido sobrescrito.", duration: 2000 });
-      } else {
-        const newId = Math.max(...forecasts.map((f) => f.id), 0) + 1;
-        setForecasts((prev) =>
-          [...prev, { id: newId, ...form }].sort(
-            (a, b) => HOURS_LIST.indexOf(a.hora) - HOURS_LIST.indexOf(b.hora)
-          )
-        );
-        sileo.success({ title: "Pronóstico Creado", description: "Se ha añadido el nuevo pronóstico exitosamente.", duration: 2000 });
-      }
+  // ─── Upsert via RPC ────────────────────────────────────────────
+  const saveModal = async () => {
+    setIsSaving(true);
+    try {
+      const { data: result, error } = await supabase.rpc("upsert_pronostico", {
+        p_hora: form.hora,
+        p_loteria: form.loteria,
+        p_animal: form.animal,
+        p_numero: form.numero,
+      });
+
+      if (error) throw error;
+
+      // Refresh list from server
+      const { data: fresh, error: fetchErr } = await supabase
+        .from("pronosticos")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (fetchErr) throw fetchErr;
+
+      const mapped: Forecast[] = (fresh ?? []).map((row: any) => ({
+        id: row.id,
+        hora: row.hora,
+        loteria: row.loteria,
+        animal: row.animal,
+        numero: row.numero,
+      }));
+      mapped.sort((a, b) => HOURS_LIST.indexOf(a.hora) - HOURS_LIST.indexOf(b.hora));
+      setForecasts(mapped);
+
+      const isEdit = editId !== null || forecasts.some(f => f.hora === form.hora);
+      sileo.success({
+        title: isEdit ? "Pronóstico Actualizado" : "Pronóstico Creado",
+        description: isEdit ? "Se ha modificado correctamente." : "Se ha añadido el nuevo pronóstico exitosamente.",
+        duration: 2000
+      });
+      closeModal();
+    } catch (err) {
+      console.error("Error saving pronostico:", err);
+      sileo.error({ title: "Error", description: "No se pudo guardar el pronóstico.", duration: 2000 });
+    } finally {
+      setIsSaving(false);
     }
-    closeModal();
   };
 
-  const deleteForecast = (id: number) => {
-    setForecasts((prev) => prev.filter((f) => f.id !== id));
-    sileo.success({ title: "Pronóstico Eliminado", description: "El registro ha sido removido del sistema.", duration: 2000 });
+  // ─── Delete via RPC ─────────────────────────────────────────────
+  const deleteForecast = async (id: number) => {
+    try {
+      const { error } = await supabase.rpc("delete_pronostico", { p_id: id });
+      if (error) throw error;
+      setForecasts((prev) => prev.filter((f) => f.id !== id));
+      sileo.success({ title: "Pronóstico Eliminado", description: "El registro ha sido removido del sistema.", duration: 2000 });
+    } catch (err) {
+      console.error("Error deleting pronostico:", err);
+      sileo.error({ title: "Error", description: "No se pudo eliminar el pronóstico.", duration: 2000 });
+    }
   };
 
   const getEmoji = (animalName: string) =>
@@ -563,8 +676,8 @@ const SectionPronosticos = () => {
                   {HOURS_LIST.map((h) => {
                     const isCovered = coveredHours.has(h);
                     return (
-                      <option 
-                        key={h} 
+                      <option
+                        key={h}
                         value={h}
                         className={isCovered ? "text-gray-400 font-medium bg-gray-50" : "text-gray-900"}
                       >
@@ -589,10 +702,10 @@ const SectionPronosticos = () => {
                   value={form.animal}
                   onChange={(e) => {
                     const selAnimal = ANIMALS.find(a => a.name === e.target.value);
-                    setForm((d) => ({ 
-                      ...d, 
+                    setForm((d) => ({
+                      ...d,
                       animal: e.target.value,
-                      numero: parseInt(selAnimal?.number ?? "0", 10) 
+                      numero: parseInt(selAnimal?.number ?? "0", 10)
                     }));
                   }}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
@@ -628,15 +741,26 @@ const SectionPronosticos = () => {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={closeModal}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium rounded-lg transition-colors"
+                disabled={isSaving}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 onClick={saveModal}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                disabled={isSaving}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                {editId !== null ? "Guardar cambios" : "Agregar"}
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" />
+                    </svg>
+                    Guardando...
+                  </>
+                ) : (
+                  editId !== null ? "Guardar cambios" : "Agregar"
+                )}
               </button>
             </div>
           </div>
@@ -646,7 +770,7 @@ const SectionPronosticos = () => {
       {/* ── Main grid ─────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Lista de pronósticos */}
-        <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative">
           <div className="flex items-center justify-between px-5 py-3.5 bg-[#1f5650] rounded-t-2xl">
             <h3 className="font-semibold text-white text-sm">Pronósticos Asignados</h3>
             <div className="flex items-center gap-1.5 text-xs text-emerald-100 font-medium">
@@ -777,9 +901,9 @@ const blankSorteoForm = () => ({
 });
 
 const SectionSorteos = () => {
-  const [results, setResults] = useState<LotteryResult[]>(() =>
-    generateResults().slice(0, 20)
-  );
+  const [results, setResults] = useState<LotteryResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(blankSorteoForm());
@@ -787,31 +911,65 @@ const SectionSorteos = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Helpers ────────────────────────────────────────────────────
+  const mapRow = (row: any): LotteryResult => ({
+    id: row.id,
+    animal: row.animal,
+    number: row.numero,
+    hour: row.hora,
+    date: row.fecha,
+    emoji: row.emoji,
+  });
+
+  const refreshSorteos = async () => {
+    const { data, error } = await supabase
+      .from("sorteos")
+      .select("*")
+      .order("fecha", { ascending: false })
+      .order("hora", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(mapRow);
+  };
+
+  // ─── Fetch on mount ──────────────────────────────────────────────
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    // Animate prediction list items
+    const fetchSorteos = async () => {
+      try {
+        const data = await refreshSorteos();
+        setResults(data);
+      } catch (err) {
+        console.error("Error fetching sorteos:", err);
+        setResults([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSorteos();
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || results.length === 0) return;
+
     anime({
       targets: '.sorteo-item',
       translateX: [-20, 0],
       opacity: [0, 1],
-      delay: anime.stagger(40, { start: 100 }),
+      delay: anime.stagger(40, { start: 50 }),
       duration: 400,
       easing: 'easeOutQuart'
     });
 
-    // Animate panel items
     anime({
       targets: '.panel-item',
       translateX: [20, 0],
       opacity: [0, 1],
-      delay: anime.stagger(30, { start: 200 }),
+      delay: anime.stagger(30, { start: 100 }),
       duration: 350,
       easing: 'easeOutQuart'
     });
-  }, [search]); // re-run animation on search update to feel snappy
+  }, [results, search]);
 
-  // Date panel: show schedule coverage for date of first result, or today
+  // Date panel
   const availableDates = Array.from(new Set(results.map((r) => r.date))).sort(
     (a, b) => b.localeCompare(a)
   );
@@ -826,7 +984,6 @@ const SectionSorteos = () => {
       String(r.number).includes(search)
   );
 
-  // Hours covered for the selected panel date
   const hoursCoveredForDate = new Set(
     results.filter((r) => r.date === panelDate).map((r) => r.hour)
   );
@@ -854,27 +1011,59 @@ const SectionSorteos = () => {
     setEditId(null);
   };
 
-  const saveModal = () => {
-    if (editId !== null) {
-      setResults((prev) =>
-        prev.map((r) => (r.id === editId ? { ...r, ...form } : r))
-      );
-      sileo.success({ title: "Sorteo Actualizado", description: "El resultado del sorteo ha sido modificado.", duration: 2000 });
-    } else {
-      const id = Math.max(...results.map((r) => r.id), 0) + 1;
-      setResults((prev) => [{ ...form, id }, ...prev]);
-      // update panel date if it's a new date
-      if (!availableDates.includes(form.date)) {
-        setPanelDate(form.date);
+  // ─── Save (create or update) via RPC ────────────────────────────
+  const saveModal = async () => {
+    setIsSaving(true);
+    try {
+      if (editId !== null) {
+        // UPDATE existing
+        const { error } = await supabase.rpc("update_sorteo", {
+          p_id: editId,
+          p_animal: form.animal,
+          p_numero: form.number,
+          p_hora: form.hour,
+          p_fecha: form.date,
+          p_emoji: form.emoji,
+        });
+        if (error) throw error;
+        sileo.success({ title: "Sorteo Actualizado", description: "El resultado del sorteo ha sido modificado.", duration: 2000 });
+      } else {
+        // INSERT (upsert by fecha+hora)
+        const { error } = await supabase.rpc("upsert_sorteo", {
+          p_animal: form.animal,
+          p_numero: form.number,
+          p_hora: form.hour,
+          p_fecha: form.date,
+          p_emoji: form.emoji,
+        });
+        if (error) throw error;
+        if (!availableDates.includes(form.date)) setPanelDate(form.date);
+        sileo.success({ title: "Sorteo Registrado", description: "El nuevo resultado del sorteo ha sido guardado.", duration: 2000 });
       }
-      sileo.success({ title: "Sorteo Registrado", description: "El nuevo resultado del sorteo ha sido guardado.", duration: 2000 });
+
+      // Refresh from DB
+      const fresh = await refreshSorteos();
+      setResults(fresh);
+      closeModal();
+    } catch (err) {
+      console.error("Error saving sorteo:", err);
+      sileo.error({ title: "Error", description: "No se pudo guardar el sorteo.", duration: 2000 });
+    } finally {
+      setIsSaving(false);
     }
-    closeModal();
   };
 
-  const deleteRow = (id: number) => {
-    setResults((prev) => prev.filter((r) => r.id !== id));
-    sileo.success({ title: "Sorteo Eliminado", description: "El registro del sorteo ha sido removido.", duration: 2000 });
+  // ─── Delete via RPC ──────────────────────────────────────────────
+  const deleteRow = async (id: number) => {
+    try {
+      const { error } = await supabase.rpc("delete_sorteo", { p_id: id });
+      if (error) throw error;
+      setResults((prev) => prev.filter((r) => r.id !== id));
+      sileo.success({ title: "Sorteo Eliminado", description: "El registro del sorteo ha sido removido.", duration: 2000 });
+    } catch (err) {
+      console.error("Error deleting sorteo:", err);
+      sileo.error({ title: "Error", description: "No se pudo eliminar el sorteo.", duration: 2000 });
+    }
   };
 
   const updateFormAnimal = (name: string) => {
@@ -1090,17 +1279,15 @@ const SectionSorteos = () => {
                 return (
                   <div
                     key={h}
-                    className={`panel-item opacity-0 flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                      covered
+                    className={`panel-item opacity-0 flex items-center justify-between p-3 rounded-lg border transition-colors ${covered
                         ? "border-emerald-200 bg-emerald-50"
                         : "border-gray-100 bg-gray-50 hover:border-blue-200"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                          covered ? "bg-emerald-400" : "bg-gray-300"
-                        }`}
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${covered ? "bg-emerald-400" : "bg-gray-300"
+                          }`}
                       />
                       <div>
                         <p className="text-xs font-mono font-medium text-gray-700">{h}</p>
@@ -1139,21 +1326,52 @@ const SectionSorteos = () => {
    Sección 4 – Historial
 ══════════════════════════════════════════════════════════════════ */
 const SectionHistorial = () => {
-  const results = generateResults();
+  const [results, setResults] = useState<LotteryResult[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const fetchSorteos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("sorteos")
+          .select("*")
+          .order("fecha", { ascending: false })
+          .order("hora", { ascending: true });
+
+        if (error) throw error;
+
+        const mapped: LotteryResult[] = (data ?? []).map((row: any) => ({
+          id: row.id,
+          animal: row.animal,
+          number: row.numero,
+          hour: row.hora,
+          date: row.fecha,
+          emoji: row.emoji,
+        }));
+        setResults(mapped);
+      } catch (err) {
+        console.error("Error fetching historial:", err);
+        setResults([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSorteos();
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || results.length === 0) return;
     anime({
       targets: '.historial-row',
       translateY: [15, 0],
       opacity: [0, 1],
-      delay: anime.stagger(30, { start: 100 }),
+      delay: anime.stagger(30, { start: 50 }),
       duration: 350,
       easing: 'easeOutQuart'
     });
-  }, []);
+  }, [results]);
 
   // Obtener las últimas 5 fechas únicas, ordenadas descendentemente
   const uniqueDates = Array.from(new Set(results.map((r) => r.date))).sort(
@@ -1199,7 +1417,12 @@ const SectionHistorial = () => {
         <p className="text-sm text-gray-500">Consulta el registro completo de todos los sorteos en vista de cuadrícula</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden w-full">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden w-full relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse min-w-max">
             <thead>
@@ -1268,6 +1491,12 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
 
+  useEffect(() => {
+    if (!sessionStorage.getItem("adminAuth")) {
+      navigate("/");
+    }
+  }, [navigate]);
+
   const renderSection = () => {
     switch (activeSection) {
       case "dashboard": return <SectionDashboard />;
@@ -1278,69 +1507,233 @@ const AdminDashboard = () => {
     }
   };
 
+  const startTour = useCallback(() => {
+    const driverObj = driver({
+      showProgress: true,
+      animate: true,
+      smoothScroll: true,
+      allowClose: true,
+      overlayOpacity: 0.5,
+      popoverClass: "admin-tour-popover",
+      nextBtnText: "Siguiente →",
+      prevBtnText: "← Anterior",
+      doneBtnText: "¡Entendido!",
+      progressText: "{{current}} de {{total}}",
+      steps: [
+        {
+          element: "#tour-dashboard",
+          popover: {
+            title: "🏠 Dashboard",
+            description: "Vista general del panel: estadísticas clave, últimos resultados y actividad reciente del sistema.",
+            side: "right",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-piramide",
+          popover: {
+            title: "🔺 La Pirámide",
+            description: "Edita los dígitos de la pirámide invertida. Haz clic en 'Editar pirámide' para modificar cada celda y guarda los cambios con Supabase.",
+            side: "right",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-pronosticos",
+          popover: {
+            title: "📡 Control de Pronósticos",
+            description: "Administra los pronósticos por hora. Agrega, edita o elimina las predicciones de cada franja horaria.",
+            side: "right",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-sorteos",
+          popover: {
+            title: "🏆 Sorteos",
+            description: "Registra y gestiona los resultados de cada sorteo. Puedes agregar nuevos resultados o editar los existentes.",
+            side: "right",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-historial",
+          popover: {
+            title: "📋 Historial",
+            description: "Consulta el registro completo de todos los sorteos en formato de cuadrícula por fecha y hora.",
+            side: "right",
+            align: "start",
+          },
+        },
+      ],
+    });
+    driverObj.drive();
+  }, []);
+
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      {/* ── Sidebar ───────────────────────────────────────────── */}
-      <aside className="w-56 flex-shrink-0 flex flex-col bg-[#1a1f37] text-white">
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-white/10">
-          <span className="text-xl font-bold tracking-tight text-white">
-            Lotto <span className="text-blue-400">Azar</span>
-          </span>
-          <p className="text-[10px] text-white/40 mt-0.5 uppercase tracking-widest">
-            Admin Panel
-          </p>
-        </div>
+    <>
+      {/* Estilos personalizados del tour */}
+      <style>{`
+        .admin-tour-popover {
+          background: #ffffff !important;
+          border-radius: 14px !important;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.18) !important;
+          border: 1px solid #e2e8f0 !important;
+          font-family: inherit !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+        .admin-tour-popover .driver-popover-title {
+          font-size: 15px !important;
+          font-weight: 700 !important;
+          color: #0f172a !important;
+          padding: 18px 20px 0 20px !important;
+          margin: 0 !important;
+        }
+        .admin-tour-popover .driver-popover-description {
+          font-size: 13px !important;
+          color: #475569 !important;
+          line-height: 1.6 !important;
+          padding: 8px 20px 0 20px !important;
+          margin: 0 !important;
+        }
+        .admin-tour-popover .driver-popover-progress-text {
+          font-size: 11px !important;
+          color: #94a3b8 !important;
+          font-weight: 500 !important;
+        }
+        .admin-tour-popover .driver-popover-footer {
+          padding: 14px 20px !important;
+          background: #f8fafc !important;
+          border-top: 1px solid #f1f5f9 !important;
+          margin-top: 14px !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          gap: 8px !important;
+        }
+        .admin-tour-popover .driver-popover-prev-btn,
+        .admin-tour-popover .driver-popover-next-btn,
+        .admin-tour-popover .driver-popover-close-btn {
+          border-radius: 8px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          padding: 7px 14px !important;
+          transition: all 0.2s !important;
+          border: none !important;
+          cursor: pointer !important;
+        }
+        .admin-tour-popover .driver-popover-next-btn {
+          background: #2563eb !important;
+          color: #ffffff !important;
+          box-shadow: 0 2px 8px rgba(37,99,235,0.35) !important;
+        }
+        .admin-tour-popover .driver-popover-next-btn:hover {
+          background: #1d4ed8 !important;
+        }
+        .admin-tour-popover .driver-popover-prev-btn {
+          background: #ffffff !important;
+          color: #475569 !important;
+          border: 1px solid #e2e8f0 !important;
+        }
+        .admin-tour-popover .driver-popover-prev-btn:hover {
+          background: #f1f5f9 !important;
+        }
+        .admin-tour-popover .driver-popover-close-btn {
+          background: transparent !important;
+          color: #94a3b8 !important;
+          padding: 4px 8px !important;
+        }
+        .admin-tour-popover .driver-popover-close-btn:hover {
+          color: #475569 !important;
+        }
+        .driver-overlay {
+          background: rgba(0,0,0,0.5) !important;
+        }
+      `}</style>
 
-        {/* Nav */}
-        <nav className="flex-1 py-4 overflow-y-auto">
-          <p className="px-5 text-[10px] text-white/30 uppercase tracking-widest mb-2">
-            Módulos
-          </p>
-          {navItems.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              onClick={() => setActiveSection(id)}
-              className={`flex items-center gap-3 w-full px-5 py-2.5 text-sm transition-colors ${activeSection === id
-                  ? "bg-blue-600 text-white font-medium"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
-                }`}
-            >
-              <Icon className="h-4 w-4 flex-shrink-0" />
-              {label}
-              {activeSection === id && (
-                <ChevronRight className="h-3 w-3 ml-auto" />
-              )}
-            </button>
-          ))}
-        </nav>
-
-        {/* User + logout */}
-        <div className="p-4 border-t border-white/10">
-          <div className="flex items-center gap-3 mb-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
-              A
-            </div>
-            <div>
-              <p className="text-xs font-medium text-white">Admin</p>
-              <p className="text-[10px] text-white/40">correo@gmail.com</p>
+      <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        {/* ── Sidebar ───────────────────────────────────────────── */}
+        <aside className="w-56 flex-shrink-0 flex flex-col bg-[#1a1f37] text-white">
+          {/* Logo + Tour button */}
+          <div className="px-5 py-5 border-b border-white/10">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-xl font-bold tracking-tight text-white">
+                  Lotto <span className="text-blue-400">Azar</span>
+                </span>
+                <p className="text-[10px] text-white/40 mt-0.5 uppercase tracking-widest">
+                  Admin Panel
+                </p>
+              </div>
+              {/* Tour button */}
+              <button
+                id="tour-btn"
+                onClick={startTour}
+                title="Tour del panel"
+                className="flex-shrink-0 mt-0.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-sm"
+              >
+                <span>🗺️</span>
+                <span>Tour</span>
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => navigate("/")}
-            className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Cerrar sesión
-          </button>
-        </div>
-      </aside>
 
-      {/* ── Main ──────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-8">
-        {renderSection()}
-      </main>
-    </div>
+          {/* Nav */}
+          <nav className="flex-1 py-4 overflow-y-auto">
+            <p className="px-5 text-[10px] text-white/30 uppercase tracking-widest mb-2">
+              Módulos
+            </p>
+            {navItems.map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                id={`tour-${id}`}
+                onClick={() => setActiveSection(id)}
+                className={`flex items-center gap-3 w-full px-5 py-2.5 text-sm transition-colors ${
+                  activeSection === id
+                    ? "bg-blue-600 text-white font-medium"
+                    : "text-white/60 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                {label}
+                {activeSection === id && (
+                  <ChevronRight className="h-3 w-3 ml-auto" />
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {/* User + logout */}
+          <div className="p-4 border-t border-white/10">
+            <div className="flex items-center gap-3 mb-3 px-1">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
+                A
+              </div>
+              <div>
+                <p className="text-xs font-medium text-white">Admin</p>
+                <p className="text-[10px] text-white/40">whpj6436@gmail.com</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                sessionStorage.removeItem("adminAuth");
+                navigate("/");
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-white/60 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Cerrar sesión
+            </button>
+          </div>
+        </aside>
+
+        {/* ── Main ──────────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto p-8">
+          {renderSection()}
+        </main>
+      </div>
+    </>
   );
 };
 

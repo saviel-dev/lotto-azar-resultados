@@ -5,13 +5,13 @@ import HeroSection from "@/components/HeroSection";
 import PyramidSection from "@/components/PyramidSection";
 import HistorySection from "@/components/HistorySection";
 import Footer from "@/components/Footer";
-import { generateResults } from "@/data/mockData";
-
-const allResults = generateResults();
+import { useSorteos } from "@/hooks/useSorteos";
+import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [updatedAgo, setUpdatedAgo] = useState(2);
   const historyRef = useRef<HTMLDivElement>(null);
+  const { results, loading, error } = useSorteos();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -23,8 +23,6 @@ const Index = () => {
   const scrollToHistory = () => {
     historyRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-
-
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,7 +40,19 @@ const Index = () => {
         </div>
 
         <div ref={historyRef}>
-          <HistorySection results={allResults} />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="text-sm">Cargando historial…</span>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-24 text-destructive">
+              <span className="text-sm font-medium">Error al cargar el historial</span>
+              <span className="text-xs opacity-70">{error}</span>
+            </div>
+          ) : (
+            <HistorySection results={results} />
+          )}
         </div>
       </main>
 

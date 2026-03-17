@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, ChevronDown, X, Eye, EyeOff, LayoutDashboard } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 
 interface LottoHeaderProps {
   onToggleFilters: () => void;
@@ -31,19 +32,33 @@ const LottoHeader = ({ onToggleFilters }: LottoHeaderProps) => {
     }
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
     setIsLoading(true);
-    setTimeout(() => {
-      if (email === "correo@gmail.com" && password === "admin123") {
+
+    try {
+      const { data, error } = await supabase.rpc('verify_admin_login', {
+        admin_email: email,
+        admin_password: password
+      });
+
+      if (error) {
+        console.error("Login verification error:", error);
+        setLoginError("Error interno durante el inicio de sesión");
+      } else if (data === true) {
+        sessionStorage.setItem("adminAuth", "true");
         setShowLogin(false);
         navigate("/admin");
       } else {
-        setIsLoading(false);
         setLoginError("Correo o contraseña incorrectos.");
       }
-    }, 1000);
+    } catch (err) {
+      console.error("Login exception:", err);
+      setLoginError("Error de conexión");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

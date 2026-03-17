@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { LotteryResult } from "@/data/mockData";
 import { Search, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
@@ -32,10 +32,29 @@ function formatDateFull(dateStr: string) {
 }
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const WORKING_DAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 function getDayName(dateStr: string) {
   const d = new Date(dateStr + "T12:00:00");
   return DAY_NAMES[d.getDay()];
+}
+
+// Helper to get week bounds (Monday to Saturday) based on a given date string
+function getWeekBounds(dateStr: string) {
+  const d = new Date(dateStr + "T12:00:00");
+  const day = d.getDay();
+  // If Sunday (0), shift to previous Monday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  
+  const weekDates = [];
+  for (let i = 0; i < 6; i++) {
+    const current = new Date(monday);
+    current.setDate(monday.getDate() + i);
+    weekDates.push(current.toISOString().split("T")[0]);
+  }
+  return weekDates;
 }
 
 const HOURS_ORDER = [
@@ -49,7 +68,15 @@ const HistorySection = ({ results }: HistorySectionProps) => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
-  const COLS_PER_PAGE = 5;
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const COLS_PER_PAGE = isMobile ? 3 : 6;
 
   // Build a lookup map: [date][hour] → result
   const resultMap = useMemo(() => {
@@ -61,23 +88,50 @@ const HistorySection = ({ results }: HistorySectionProps) => {
     return map;
   }, [results]);
 
-  // Sorted unique dates
-  const allDates = useMemo(() => {
-    const dates = Array.from(new Set(results.map((r) => r.date))).sort(
+  // Group dates by week (Monday-Saturday chunks)
+  const weeks = useMemo(() => {
+    const allUniqueDates = Array.from(new Set(results.map((r) => r.date))).sort(
       (a, b) => (a < b ? 1 : -1) // most recent first
     );
-    let filtered = dates;
-    if (dateFrom) filtered = filtered.filter((d) => d >= dateFrom);
-    if (dateTo)   filtered = filtered.filter((d) => d <= dateTo);
-    return filtered;
+    
+    // Convert flat dates into unique weeks
+    const weekMap = new Map<string, string[]>();
+    
+    allUniqueDates.forEach(date => {
+      const d = new Date(date + "T12:00:00");
+      if (d.getDay() === 0) return; // Skip Sundays altogether
+      
+      const bounds = getWeekBounds(date);
+      const weekKey = bounds[0]; // Monday is the key
+      if (!weekMap.has(weekKey)) {
+        weekMap.set(weekKey, bounds);
+      }
+    });
+
+    // Array of weeks (each week is an array of 6 date strings Mon-Sat)
+    let sortedWeeks = Array.from(weekMap.values()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+
+    // Simple date filtering: if a week has no dates bounding the filter, we can drop it.
+    // However, to keep it simple and ensure we don't break the weekly view, 
+    // we just check if the week's Saturday >= dateFrom and Monday <= dateTo.
+    if (dateFrom) {
+      sortedWeeks = sortedWeeks.filter(week => week[5] >= dateFrom);
+    }
+    if (dateTo) {
+      sortedWeeks = sortedWeeks.filter(week => week[0] <= dateTo);
+    }
+
+    return sortedWeeks;
   }, [results, dateFrom, dateTo]);
 
-  // Pagination for columns
-  const totalPages = Math.ceil(allDates.length / COLS_PER_PAGE);
-  const visibleDates = allDates.slice(
-    page * COLS_PER_PAGE,
-    page * COLS_PER_PAGE + COLS_PER_PAGE
-  );
+  const totalPages = weeks.length;
+  // If mobile, we could slice the 6 days into 2 pages of 3.
+  // For simplicity based on user request ("organiza por los respectivos dias"), 
+  // we will just horizontal-scroll the 6 columns on mobile, matching standard calendars,
+  // or we can slice the week down if mobile. Let's keep the full week but let it scroll on mobile
+  // by forcing COLS_PER_PAGE=6 and letting CSS handle overflow.
+  
+  const currentWeekDates = weeks[page] || [];
 
   // Filter rows by search (highlight matching animal name)
   const searchLower = search.trim().toLowerCase();
@@ -85,7 +139,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
     !searchLower || animal.toLowerCase().includes(searchLower);
 
   return (
-    <section className="w-full py-12 px-2 sm:px-4" aria-label="Historial de sorteos">
+    <section className="w-full py-6 sm:py-12 px-2 sm:px-4" aria-label="Historial de sorteos">
       {/* Title */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -108,10 +162,10 @@ const HistorySection = ({ results }: HistorySectionProps) => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.4, delay: 0.1 }}
-        className="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 items-end"
+        className="max-w-4xl mx-auto mb-4 sm:mb-6 flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end"
       >
         {/* Search */}
-        <div className="relative flex-1 min-w-[180px]">
+        <div className="relative w-full sm:flex-1 sm:min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="text"
@@ -122,27 +176,30 @@ const HistorySection = ({ results }: HistorySectionProps) => {
             aria-label="Buscar animal"
           />
         </div>
-        {/* From */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Desde</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
-            className="history-filter-input"
-            aria-label="Fecha desde"
-          />
-        </div>
-        {/* To */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Hasta</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
-            className="history-filter-input"
-            aria-label="Fecha hasta"
-          />
+        {/* Date range row */}
+        <div className="flex gap-3 w-full sm:w-auto sm:contents">
+          {/* From */}
+          <div className="flex flex-col gap-1 flex-1 sm:flex-none">
+            <label className="text-xs font-medium text-muted-foreground">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+              className="history-filter-input"
+              aria-label="Fecha desde"
+            />
+          </div>
+          {/* To */}
+          <div className="flex flex-col gap-1 flex-1 sm:flex-none">
+            <label className="text-xs font-medium text-muted-foreground">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+              className="history-filter-input"
+              aria-label="Fecha hasta"
+            />
+          </div>
         </div>
       </motion.div>
 
@@ -154,7 +211,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
         transition={{ duration: 0.45, delay: 0.15 }}
         className="max-w-5xl mx-auto"
       >
-        {allDates.length === 0 ? (
+        {weeks.length === 0 ? (
           <p className="text-center text-muted-foreground py-12">
             No se encontraron resultados.
           </p>
@@ -164,8 +221,8 @@ const HistorySection = ({ results }: HistorySectionProps) => {
             {totalPages > 1 && (
               <div className="flex items-center justify-end gap-2 mb-3">
                 <span className="text-xs text-muted-foreground">
-                  {formatDateFull(allDates[allDates.length - 1])} –{" "}
-                  {formatDateFull(allDates[0])}
+                  Semana: {formatDateFull(currentWeekDates[0])} –{" "}
+                  {formatDateFull(currentWeekDates[5])}
                 </span>
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -195,9 +252,9 @@ const HistorySection = ({ results }: HistorySectionProps) => {
                 <thead>
                   <tr>
                     <th className="history-th history-th-hour">Horario</th>
-                    {visibleDates.map((date) => (
+                    {currentWeekDates.map((date) => (
                       <th key={date} className="history-th history-th-date">
-                        <span className="block text-[10px] font-normal opacity-80">
+                        <span className="block text-[10px] font-normal opacity-80 uppercase tracking-wider">
                           {getDayName(date)}
                         </span>
                         <span className="block text-xs font-bold">
@@ -217,7 +274,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
                       className={rowIdx % 2 === 0 ? "history-row-even" : "history-row-odd"}
                     >
                       <td className="history-td history-td-hour">{hour}</td>
-                      {visibleDates.map((date) => {
+                      {currentWeekDates.map((date) => {
                         const r = resultMap[date]?.[hour];
                         const highlight = r && searchMatches(r.animal);
                         const dimmed = searchLower && r && !searchMatches(r.animal);
