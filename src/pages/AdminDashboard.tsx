@@ -31,6 +31,7 @@ import {
   Clock,
   CircleCheckBig,
   Menu,
+  Map,
 } from "lucide-react";
 import {
   PYRAMID_DATA,
@@ -1731,7 +1732,7 @@ const AdminDashboard = () => {
               onClick={startTour}
               className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors"
             >
-              <span>🗺️</span>
+              <Map className="h-4 w-4" />
               <span>Tour</span>
             </button>
             <button 
@@ -1807,7 +1808,7 @@ const AdminDashboard = () => {
                 title="Tour del panel"
                 className="flex-shrink-0 mt-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-md"
               >
-                <span>🗺️</span>
+                <Map className="h-4 w-4" />
                 <span>Tour</span>
               </button>
             </div>
