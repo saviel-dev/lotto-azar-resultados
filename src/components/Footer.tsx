@@ -89,13 +89,14 @@ const Footer = () => {
                   </h3>
                   <ul className="flex flex-col gap-3">
                     {[
-                      { bet: "Por 1", win: "70 Bs" },
-                      { bet: "Por 10", win: "700 Bs" },
-                      { bet: "Por 100", win: "7.000 Bs" },
+                      { win: "70", mult: "1" },
+                      { win: "700", mult: "10" },
+                      { win: "7.000", mult: "100" },
                     ].map((item, idx) => (
-                      <li key={idx} className="bg-card border-l-4 border-primary py-3 px-4 rounded-lg flex justify-between items-center text-base font-semibold shadow-sm border-[1px] border-border/50 gap-2">
-                        <span className="text-muted-foreground">{item.bet}</span>
-                        <span className="text-foreground text-lg font-black">{item.win}</span>
+                      <li key={idx} className="bg-card border-l-4 border-primary py-3 px-4 rounded-lg flex justify-center items-center shadow-sm border-[1px] border-border/50 gap-2">
+                        <span className="text-primary text-2xl font-black">{item.win}</span>
+                        <span className="text-muted-foreground text-xl font-black mx-1">×</span>
+                        <span className="text-foreground text-2xl font-black">{item.mult}</span>
                       </li>
                     ))}
                   </ul>
@@ -115,32 +116,19 @@ const Footer = () => {
                     "Por comodín paga 1 por tanto, 10 por tanto y 100 por tanto."
                   </p>
 
-                  <div className="w-full rounded-xl overflow-hidden border border-border shadow-sm">
-                    <table className="w-full border-collapse text-center bg-card">
-                      <thead>
-                        <tr>
-                          <th className="bg-muted text-muted-foreground py-2.5 px-2 text-xs font-bold uppercase tracking-wider border-b border-border">
-                            Bolívares
-                          </th>
-                          <th className="bg-muted text-muted-foreground py-2.5 px-2 text-xs font-bold uppercase tracking-wider border-b border-border">
-                            Paga
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          { bet: "1", win: "140 Bs" },
-                          { bet: "10", win: "1.400 Bs" },
-                          { bet: "100", win: "14.000 Bs" },
-                        ].map((row, idx) => (
-                          <tr key={idx} className={idx !== 2 ? "border-b border-border/50" : ""}>
-                            <td className="py-3 px-2 text-base font-semibold text-foreground">{row.bet}</td>
-                            <td className="py-3 px-2 text-lg font-black text-primary">{row.win}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="flex flex-col gap-3">
+                    {[
+                      { win: "140", mult: "1" },
+                      { win: "1.400", mult: "10" },
+                      { win: "14.000", mult: "100" },
+                    ].map((item, idx) => (
+                      <li key={idx} className="bg-card border-l-4 border-primary py-3 px-4 rounded-lg flex justify-center items-center shadow-sm border-[1px] border-border/50 gap-2">
+                        <span className="text-primary text-2xl font-black">{item.win}</span>
+                        <span className="text-muted-foreground text-xl font-black mx-1">×</span>
+                        <span className="text-foreground text-2xl font-black">{item.mult}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </section>
               </div>
             </motion.div>

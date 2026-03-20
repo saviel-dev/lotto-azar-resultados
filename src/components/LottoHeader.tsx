@@ -102,18 +102,19 @@ const LottoHeader = ({ onToggleFilters }: LottoHeaderProps) => {
           aria-label="Tabla de premios"
         >
           {[
-            { bet: "1.", prize: "70" },
-            { bet: "10.", prize: "700" },
-            { bet: "100.", prize: "7.000" },
-            { bet: "Comodín.", prize: "2" },
-          ].map(({ bet, prize }) => (
+            { prefix: "", val: "70", mult: "1" },
+            { prefix: "", val: "700", mult: "10" },
+            { prefix: "", val: "7.000", mult: "100" },
+            { prefix: "Comodín: ", val: "140", mult: "1" },
+          ].map(({ prefix, val, mult }, i) => (
             <span
-              key={bet}
+              key={i}
               className="shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold whitespace-nowrap bg-muted border border-border text-foreground"
             >
-              <span className="text-muted-foreground">{bet}</span>
+              {prefix && <span className="text-muted-foreground mr-0.5">{prefix}</span>}
+              <span className="text-primary font-extrabold">{val}</span>
               <span className="text-muted-foreground font-black text-[11px] mx-0.5">×</span>
-              <span className="text-primary font-extrabold">{prize}</span>
+              <span className="text-foreground">{mult}</span>
             </span>
           ))}
         </div>
