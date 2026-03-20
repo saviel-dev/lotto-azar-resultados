@@ -346,7 +346,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
             style={{ color: "#60a5fa" }}>
             Horarios del día
           </p>
-          <div className="flex overflow-x-auto sm:flex-wrap sm:justify-center gap-2 pb-1 sm:pb-0 hero-chips-scroll">
+          <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex overflow-x-auto sm:flex-wrap sm:justify-center gap-2.5 pb-4 sm:pb-0 hero-chips-scroll snap-x snap-mandatory scroll-p-4">
             {HOURS_LIST.map((h, i) => {
               const hasResult = !!getResult(i);
               const isSelected = i === displayIdx;
@@ -388,7 +388,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
                   key={h}
                   onClick={() => handleChipClick(i)}
                   disabled={transitioning || !isCovered}
-                  className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="snap-center flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   style={{ background: bg, color, border, boxShadow: shadow, transform: scale }}
                   title={hasResult ? "Resultado publicado" : isCovered ? "Sin resultado" : "Próximamente"}
                 >
