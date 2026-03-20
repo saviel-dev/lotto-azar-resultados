@@ -19,66 +19,7 @@ function getCurrentHourIndex(): number {
   return best === -1 ? 0 : best;
 }
 
-/* ─── Datos de pagos ──────────────────────────────────────── */
-const PAGOS_NORMAL = [
-  { tipo: "Terminal", descripcion: "Último dígito del número", pago: "7x" },
-  { tipo: "Centena", descripcion: "Últimos 2 dígitos", pago: "70x" },
-  { tipo: "Exacta", descripcion: "Número exacto (00-99)", pago: "70x" },
-  { tipo: "Corrida", descripcion: "Cualquier combinación del número", pago: "12x" },
-];
 
-const PAGOS_COMODIN = [
-  { tipo: "Terminal Comodín", descripcion: "Último dígito + comodín", pago: "14x" },
-  { tipo: "Centena Comodín", descripcion: "Últimos 2 dígitos + comodín", pago: "140x" },
-  { tipo: "Exacta Comodín", descripcion: "Número exacto + comodín", pago: "140x" },
-  { tipo: "Corrida Comodín", descripcion: "Combinación + comodín", pago: "24x" },
-];
-
-/* ─── Subcomponentes ────────────────────────────────────────── */
-
-function PayCard({
-  tipo,
-  descripcion,
-  pago,
-  isComodin,
-}: {
-  tipo: string;
-  descripcion: string;
-  pago: string;
-  isComodin?: boolean;
-}) {
-  const accent = isComodin
-    ? "rgba(168,85,247,0.18)"
-    : "rgba(59,130,246,0.15)";
-  const accentBorder = isComodin
-    ? "rgba(168,85,247,0.3)"
-    : "rgba(59,130,246,0.25)";
-  const payColor = isComodin ? "#c084fc" : "#60a5fa";
-
-  return (
-    <div
-      className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 border bg-card/60 hover:bg-card transition-colors"
-      style={{
-        borderColor: accentBorder,
-      }}
-    >
-      <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="text-sm font-bold text-foreground leading-tight truncate">
-          {tipo}
-        </span>
-        <span className="text-[11px] leading-snug text-muted-foreground">
-          {descripcion}
-        </span>
-      </div>
-      <span
-        className="text-xl font-black tabular-nums shrink-0"
-        style={{ color: payColor }}
-      >
-        {pago}
-      </span>
-    </div>
-  );
-}
 
 /* ════════════════════════════════════════════════════════════════
    SorteoInfoSection
@@ -197,9 +138,17 @@ const SorteoInfoSection = () => {
               </span>
             </div>
 
-            <div className="flex flex-col gap-2">
-              {PAGOS_NORMAL.map((p) => (
-                <PayCard key={p.tipo} {...p} />
+            <div className="flex flex-col gap-3 mt-1">
+              {[
+                { win: "70", mult: "1" },
+                { win: "700", mult: "10" },
+                { win: "7.000", mult: "100" },
+              ].map((item, idx) => (
+                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-blue-200/50 dark:border-blue-800/30 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm">
+                  <span className="text-blue-500 text-3xl font-black">{item.win}</span>
+                  <span className="text-muted-foreground text-2xl font-black opacity-50">×</span>
+                  <span className="text-foreground text-3xl font-black">{item.mult}</span>
+                </div>
               ))}
             </div>
 
@@ -225,9 +174,17 @@ const SorteoInfoSection = () => {
               </span>
             </div>
 
-            <div className="flex flex-col gap-2">
-              {PAGOS_COMODIN.map((p) => (
-                <PayCard key={p.tipo} {...p} isComodin />
+            <div className="flex flex-col gap-3 mt-1">
+              {[
+                { win: "140", mult: "1" },
+                { win: "1.400", mult: "10" },
+                { win: "14.000", mult: "100" },
+              ].map((item, idx) => (
+                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-purple-200/50 dark:border-purple-800/30 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm">
+                  <span className="text-purple-500 text-3xl font-black">{item.win}</span>
+                  <span className="text-muted-foreground text-2xl font-black opacity-50">×</span>
+                  <span className="text-foreground text-3xl font-black">{item.mult}</span>
+                </div>
               ))}
             </div>
 
