@@ -67,31 +67,58 @@ const LottoHeader = ({ onToggleFilters }: LottoHeaderProps) => {
         initial={{ y: -60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="fixed top-0 left-0 right-0 z-50 h-[60px] md:h-[72px] header-glass border-b border-border flex items-center justify-between px-4 md:px-8"
+        className="w-full bg-background border-b border-border flex flex-col items-center px-4 md:px-6"
         role="banner"
       >
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
-          <h1
-            className="text-lg md:text-xl font-extrabold text-primary tracking-tight cursor-pointer select-none"
-            onClick={handleLogoClick}
-            title="Lotto Azar"
-          >
-            Lotto Azar
-          </h1>
+        {/* ── Fila principal: nav + título + historial ─────────── */}
+        <div className="w-full h-[48px] md:h-[56px] flex items-center justify-between">
+          <div className="flex-1" />
+          <div className="flex flex-col items-center gap-0">
+            <h1
+              className="text-lg md:text-xl font-extrabold text-primary tracking-tight cursor-pointer select-none leading-tight"
+              onClick={handleLogoClick}
+              title="Lotto Azar"
+            >
+              Lotto Azar
+            </h1>
+          </div>
+          <div className="flex-1 flex justify-end">
+            <button
+              onClick={onToggleFilters}
+              aria-label="Ver historial de sorteos"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors px-3 py-2 rounded-lg hover:bg-muted"
+            >
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Historial</span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 flex justify-end">
-          <button
-            onClick={onToggleFilters}
-            aria-label="Ver historial de sorteos"
-            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors px-3 py-2 rounded-lg hover:bg-muted"
-          >
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Historial</span>
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
+
+        {/* ── Franja de premios ──────────────────────────────── */}
+        <div
+          className="w-full flex items-center justify-center gap-1.5 pb-2 overflow-x-auto"
+          style={{ scrollbarWidth: "none" }}
+          aria-label="Tabla de premios"
+        >
+          {[
+            { bet: "1", prize: "70 Bs" },
+            { bet: "10", prize: "700 Bs" },
+            { bet: "100", prize: "7.000 Bs" },
+            { bet: "Comodín", prize: "Premio ×2" },
+          ].map(({ bet, prize }) => (
+            <span
+              key={bet}
+              className="shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold whitespace-nowrap bg-muted border border-border text-foreground"
+            >
+              <span className="text-muted-foreground">{bet}</span>
+              <span className="text-border">→</span>
+              <span className="text-primary font-extrabold">{prize}</span>
+            </span>
+          ))}
         </div>
       </motion.header>
+
 
       {/* Login Modal */}
       <AnimatePresence>

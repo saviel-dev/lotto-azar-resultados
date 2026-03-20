@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { LotteryResult } from "@/data/mockData";
 
@@ -17,16 +17,22 @@ interface UseSorteosResult {
   error: string | null;
 }
 
+/** Hash ligero: serializa los IDs ordenados para detectar cambios sin deep-compare. */
+function hashIds(rows: SorteoRow[]): string {
+  return rows.map((r) => r.id).sort((a, b) => a - b).join(",");
+}
+
 export function useSorteos(): UseSorteosResult {
   const [results, setResults] = useState<LotteryResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastHashRef = useRef<string>("");
 
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchSorteos() {
-      setLoading(true);
+    async function fetchSorteos(silent = false) {
+      if (!silent) setLoading(true);
       setError(null);
 
       const { data, error: sbError } = await supabase
@@ -44,7 +50,14 @@ export function useSorteos(): UseSorteosResult {
         return;
       }
 
-      const mapped: LotteryResult[] = (data as SorteoRow[]).map((row) => ({
+      const rows = data as SorteoRow[];
+
+      // Solo actualizar el estado si hubo cambios reales (evita re-renders innecesarios)
+      const newHash = hashIds(rows);
+      if (silent && newHash === lastHashRef.current) return;
+      lastHashRef.current = newHash;
+
+      const mapped: LotteryResult[] = rows.map((row) => ({
         id: row.id,
         animal: row.animal,
         number: row.numero,
@@ -59,7 +72,7 @@ export function useSorteos(): UseSorteosResult {
 
     fetchSorteos();
 
-    // Suscripción en tiempo real: actualiza automáticamente cuando se añade/modifica/elimina un sorteo
+    // Suscripción en tiempo real vía WebSocket de Supabase
     const channel = supabase
       .channel("sorteos-realtime")
       .on(
@@ -71,8 +84,14 @@ export function useSorteos(): UseSorteosResult {
       )
       .subscribe();
 
+    // Polling de respaldo cada 30 s (por si el WebSocket cae)
+    const pollInterval = setInterval(() => {
+      if (!cancelled) fetchSorteos(true); // silent=true: no muestra spinner
+    }, 30_000);
+
     return () => {
       cancelled = true;
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, []);

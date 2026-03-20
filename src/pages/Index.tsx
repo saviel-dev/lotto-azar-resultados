@@ -5,6 +5,7 @@ import HeroSection from "@/components/HeroSection";
 import PyramidSection from "@/components/PyramidSection";
 import HistorySection from "@/components/HistorySection";
 import Footer from "@/components/Footer";
+import SorteoInfoSection from "@/components/SorteoInfoSection";
 import { useSorteos } from "@/hooks/useSorteos";
 import { Loader2 } from "lucide-react";
 
@@ -26,13 +27,13 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <LottoHeader onToggleFilters={scrollToHistory} />
-      {/* Ticker de pronóstico fijo justo debajo del header */}
-      <div className="fixed left-0 right-0 z-40 top-[60px] md:top-[72px]">
+      {/* Contenedor sticky único para Header y Ticker con separación (hr implícito por los bordes) */}
+      <div className="sticky top-0 z-50 w-full flex flex-col shadow-sm">
+        <LottoHeader onToggleFilters={scrollToHistory} />
         <ForecastTicker />
       </div>
-      {/* main con padding para header + ticker (~30px extra) */}
-      <main className="pt-[90px] md:pt-[106px]">
+      {/* main rest of content */}
+      <main className="pt-4">
         <HeroSection updatedAgo={updatedAgo} />
 
         <div className="bg-card border-y border-border">
@@ -56,6 +57,7 @@ const Index = () => {
         </div>
       </main>
 
+      <SorteoInfoSection />
       <Footer />
     </div>
   );
