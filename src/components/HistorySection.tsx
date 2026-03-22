@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { LotteryResult } from "@/data/mockData";
 import { Search, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatAnimalNumber } from "@/lib/utils";
 
 interface HistorySectionProps {
   results: LotteryResult[];
@@ -49,7 +50,7 @@ function getWeekBounds(dateStr: string) {
   monday.setDate(d.getDate() + diffToMonday);
   
   const weekDates = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 7; i++) {
     const current = new Date(monday);
     current.setDate(monday.getDate() + i);
     weekDates.push(current.toISOString().split("T")[0]);
@@ -76,7 +77,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const COLS_PER_PAGE = isMobile ? 3 : 6;
+  const COLS_PER_PAGE = isMobile ? 3 : 7;
 
   // Build a lookup map: [date][hour] → result
   const resultMap = useMemo(() => {
@@ -99,7 +100,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
     
     allUniqueDates.forEach(date => {
       const d = new Date(date + "T12:00:00");
-      if (d.getDay() === 0) return; // Skip Sundays altogether
+      // Ya no saltamos los domingos (día 0)
       
       const bounds = getWeekBounds(date);
       const weekKey = bounds[0]; // Monday is the key
@@ -108,14 +109,14 @@ const HistorySection = ({ results }: HistorySectionProps) => {
       }
     });
 
-    // Array of weeks (each week is an array of 6 date strings Mon-Sat)
+    // Array of weeks (each week is an array of 7 date strings Mon-Sun)
     let sortedWeeks = Array.from(weekMap.values()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
 
     // Simple date filtering: if a week has no dates bounding the filter, we can drop it.
     // However, to keep it simple and ensure we don't break the weekly view, 
-    // we just check if the week's Saturday >= dateFrom and Monday <= dateTo.
+    // we just check if the week's Sunday >= dateFrom and Monday <= dateTo.
     if (dateFrom) {
-      sortedWeeks = sortedWeeks.filter(week => week[5] >= dateFrom);
+      sortedWeeks = sortedWeeks.filter(week => week[6] >= dateFrom);
     }
     if (dateTo) {
       sortedWeeks = sortedWeeks.filter(week => week[0] <= dateTo);
@@ -222,7 +223,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
               <div className="flex items-center justify-end gap-2 mb-3">
                 <span className="text-xs text-muted-foreground">
                   Semana: {formatDateFull(currentWeekDates[0])} –{" "}
-                  {formatDateFull(currentWeekDates[5])}
+                  {formatDateFull(currentWeekDates[6])}
                 </span>
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -283,7 +284,7 @@ const HistorySection = ({ results }: HistorySectionProps) => {
                             {r ? (
                               <div
                                 className={`animal-cell ${dimmed ? "animal-cell-dim" : ""} ${highlight && searchLower ? "animal-cell-highlight" : ""}`}
-                                title={`${r.animal} · #${r.number.toString().padStart(2, "0")}`}
+                                title={`${r.animal} · #${formatAnimalNumber(r.animal, r.number)}`}
                               >
                                 <div
                                   className="animal-circle"

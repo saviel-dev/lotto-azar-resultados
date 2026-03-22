@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { HOURS_LIST } from "@/data/mockData";
+import { formatAnimalNumber } from "@/lib/utils";
 import { useSorteos } from "@/hooks/useSorteos";
 
 /* ─── Helpers de tiempo ────────────────────────────────────────── */
@@ -286,7 +287,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
                 </h1>
                 <p className="text-2xl sm:text-3xl md:text-4xl font-black tabular-nums mt-1"
                   style={{ color: "#fbbf24" }}>
-                  {String(displayResult.number).padStart(2, "0")}
+                  {formatAnimalNumber(displayResult.animal, displayResult.number)}
                 </p>
               </>
             ) : (

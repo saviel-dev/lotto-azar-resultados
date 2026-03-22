@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { formatAnimalNumber } from "@/lib/utils";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { animate, stagger } from "animejs";
 import { sileo } from "sileo";
@@ -297,7 +298,7 @@ const SectionDashboard = () => {
                     <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.fecha}</td>
                     <td className="px-5 py-3 text-xs font-mono text-gray-400">{r.hora}</td>
                     <td className="px-5 py-3 font-medium text-gray-800">{r.emoji} {r.animal}</td>
-                    <td className="px-5 py-3 font-bold text-blue-600">{String(r.numero).padStart(2, "0")}</td>
+                    <td className="px-5 py-3 font-bold text-blue-600">{formatAnimalNumber(r.animal, r.numero)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -798,7 +799,7 @@ const SectionPronosticos = () => {
                   Número
                 </label>
                 <div className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2.5 text-sm text-gray-500 font-mono font-bold">
-                  {String(form.numero).padStart(2, "0")}
+                  {formatAnimalNumber(form.animal, form.numero)}
                 </div>
               </div>
             </div>
@@ -876,7 +877,7 @@ const SectionPronosticos = () => {
                     <p className="text-xs mt-1">
                       <span className="text-gray-400">Nro:</span>{" "}
                       <span className="font-bold text-blue-600">
-                        {String(f.numero).padStart(2, "0")}
+                        {formatAnimalNumber(f.animal, f.numero)}
                       </span>
                     </p>
                   </div>
@@ -1219,7 +1220,7 @@ const SectionSorteos = () => {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-gray-800">{form.animal}</p>
-                    <p className="text-xs text-gray-400">Nro: <span className="font-bold text-blue-600">{String(form.number).padStart(2, "0")}</span></p>
+                    <p className="text-xs text-gray-400">Nro: <span className="font-bold text-blue-600">{formatAnimalNumber(form.animal, form.number)}</span></p>
                   </div>
                 </div>
               </div>
@@ -1291,7 +1292,7 @@ const SectionSorteos = () => {
                     <p className="text-xs mt-1">
                       <span className="text-gray-400">Nro:</span>{" "}
                       <span className="font-bold text-blue-600">
-                        {String(r.number).padStart(2, "0")}
+                        {formatAnimalNumber(r.animal, r.number)}
                       </span>
                     </p>
                   </div>
@@ -1359,7 +1360,7 @@ const SectionSorteos = () => {
                         <p className="text-xs font-mono font-medium text-gray-700">{h}</p>
                         {covered && entry && (
                           <p className="text-xs text-emerald-600 font-medium truncate max-w-[120px]">
-                            {entry.emoji} {entry.animal} · <span className="font-bold">{String(entry.number).padStart(2, "0")}</span>
+                            {entry.emoji} {entry.animal} · <span className="font-bold">{formatAnimalNumber(entry.animal, entry.number)}</span>
                           </p>
                         )}
                       </div>
