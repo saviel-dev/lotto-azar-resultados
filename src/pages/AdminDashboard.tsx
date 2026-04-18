@@ -13,7 +13,6 @@ const anime = Object.assign((options: any) => {
 }, { stagger });
 import {
   LayoutDashboard,
-  Triangle,
   Radio,
   Trophy,
   History,
@@ -26,32 +25,28 @@ import {
   X,
   Users,
   Activity,
-  ArrowUpRight,
-  ArrowDownRight,
   Bell,
   Clock,
   CircleCheckBig,
   Menu,
   Map,
+  Settings,
 } from "lucide-react";
 import {
-  PYRAMID_DATA,
   ANIMALS,
   HOURS_LIST,
   generateResults,
   type LotteryResult,
 } from "@/data/mockData";
 import { supabase } from "@/lib/supabase";
+import { Input } from "@/components/ui/input";
 
 /* ── helpers ────────────────────────────────────────────────────── */
-const YELLOW = { bg: "#f6c90e", text: "#1a1a00" };
-const GREEN = { bg: "#2d8c3e", text: "#ffffff" };
-
 const ALL_ANIMALS = ANIMALS.map((a) => a.name);
 
 const LOTTERY_NAMES = ["Ardilla", "León", "Camello", "Vaca"];
 
-type Section = "dashboard" | "piramide" | "pronosticos" | "sorteos" | "historial";
+type Section = "dashboard" | "configuracion" | "pronosticos" | "sorteos" | "historial";
 
 interface Forecast {
   id: number;
@@ -64,10 +59,10 @@ interface Forecast {
 /* ── nav ────────────────────────────────────────────────────────── */
 const navItems: { id: Section; icon: React.ElementType; label: string }[] = [
   { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { id: "piramide", icon: Triangle, label: "La Pirámide" },
   { id: "pronosticos", icon: Radio, label: "Control de Pronósticos" },
   { id: "sorteos", icon: Trophy, label: "Sorteos" },
   { id: "historial", icon: History, label: "Historial" },
+  { id: "configuracion", icon: Settings, label: "Configuración" },
 ];
 
 /* ════════════════════════════════════════════════════════════════
@@ -86,7 +81,6 @@ const SectionDashboard = () => {
     totalResults: 0,
     todayResults: 0,
     latest: [] as any[],
-    pyramidDigits: 0,
     isLoading: true
   });
 
@@ -95,12 +89,6 @@ const SectionDashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        let pDigits = PYRAMID_DATA.reduce((acc, row) => acc + row.length, 0);
-        const { data: pData } = await supabase.from("pyramid").select("data").eq("id", 1).single();
-        if (pData?.data) {
-          pDigits = pData.data.reduce((acc: number, row: any[]) => acc + row.length, 0);
-        }
-
         const { count: totalCount } = await supabase
           .from("sorteos")
           .select("*", { count: "exact", head: true });
@@ -127,7 +115,6 @@ const SectionDashboard = () => {
           totalResults: totalCount || 0,
           todayResults: todayCount || 0,
           latest: latestData || [],
-          pyramidDigits: pDigits,
           isLoading: false
         });
       } catch (err) {
@@ -141,7 +128,6 @@ const SectionDashboard = () => {
   useEffect(() => {
     if (!containerRef.current || stats.isLoading) return;
 
-    // Animate stats cards
     anime({
       targets: '.stat-card',
       translateY: [20, 0],
@@ -151,9 +137,6 @@ const SectionDashboard = () => {
       easing: 'easeOutQuad'
     });
 
-
-
-    // Animate tables/lists
     anime({
       targets: '.dashboard-list-item',
       translateX: [-15, 0],
@@ -168,7 +151,7 @@ const SectionDashboard = () => {
     { label: "Resultados Registrados", value: stats.totalResults.toString(), sub: `${stats.todayResults} hoy` },
     { label: "Animales en Sistema", value: ANIMALS.length.toString(), sub: "catálogo completo" },
     { label: "Franjas Horarias", value: HOURS_LIST.length.toString(), sub: "sorteos por día" },
-    { label: "Dígitos en Pirámide", value: stats.pyramidDigits.toString(), sub: `${PYRAMID_DATA.length} filas` },
+    { label: "Pronósticos Hoy", value: "—", sub: "ver módulo pronósticos" },
   ];
 
   return (
@@ -335,193 +318,361 @@ const SectionDashboard = () => {
 };
 
 /* ════════════════════════════════════════════════════════════════
-   Sección 1 – Pirámide
+   Sección: Configuración de Apuestas
 ══════════════════════════════════════════════════════════════════ */
-const SectionPiramide = () => {
-  const [pyramid, setPyramid] = useState<(number | string)[][]>([]);
-  const [editing, setEditing] = useState(false);
+interface BetConfig {
+  id: number;
+  monto_minimo: number;
+  monto_maximo: number;
+  multiplicador_normal: number;
+  multiplicador_comodin: number;
+}
+
+const DEFAULT_CONFIG: BetConfig = {
+  id: 1,
+  monto_minimo: 1,
+  monto_maximo: 10000,
+  multiplicador_normal: 70,
+  multiplicador_comodin: 140,
+};
+
+const SectionConfiguracion = () => {
+  const [config, setConfig] = useState<BetConfig>(DEFAULT_CONFIG);
+  const [form, setForm] = useState<BetConfig>(DEFAULT_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchPyramid = async () => {
+    const fetchConfig = async () => {
       try {
         const { data, error } = await supabase
-          .from("pyramid")
-          .select("data")
+          .from("bet_config")
+          .select("*")
           .eq("id", 1)
           .single();
 
-        if (error) throw error;
-        if (data && data.data) {
-          setPyramid(data.data);
-        } else {
-          setPyramid(PYRAMID_DATA.map((row) => [...row]));
+        if (!error && data) {
+          setConfig(data);
+          setForm(data);
         }
       } catch (err) {
-        console.error("Error fetching pyramid:", err);
-        setPyramid(PYRAMID_DATA.map((row) => [...row]));
+        console.warn("bet_config table not found, using defaults:", err);
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchPyramid();
+    fetchConfig();
   }, []);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const handleChange = (field: keyof BetConfig, value: string) => {
+    if (value === "") {
+      setForm((prev) => ({ ...prev, [field]: "" as unknown as number }));
+      setIsDirty(true);
+      return;
+    }
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) return;
+    setForm(prev => ({ ...prev, [field]: num }));
+    setIsDirty(true);
+  };
 
-    // Animate the row containers sequentially from bottom to top
-    // Alternatively, animate the cells staggering from the top
-    anime({
-      targets: '.pyramid-cell',
-      translateY: [-50, 0],
-      scale: [0.8, 1],
-      opacity: [0, 1],
-      delay: anime.stagger(40, { start: 100, from: 'first' }),
-      duration: 600,
-      easing: 'easeOutElastic(1, .8)'
-    });
-  }, []);
-
-  const updateCell = (r: number, c: number, val: string) => {
-    if (val === "") {
-      setPyramid((prev) =>
-        prev.map((row, ri) =>
-          ri === r ? row.map((cell, ci) => (ci === c ? "" : cell)) : row
-        )
-      );
+  const handleSave = async () => {
+    // Validar campos vacíos
+    if (Object.values(form).some(v => v === "")) {
+      sileo.error({ title: "Error de validación", description: "Ningún campo puede estar vacío.", duration: 2000 });
       return;
     }
 
-    let n = parseInt(val);
-    if (!isNaN(n) && val.length > 1) {
-      n = parseInt(val.slice(-1));
+    if (form.monto_minimo >= form.monto_maximo) {
+      sileo.error({ title: "Error de validación", description: "El monto mínimo debe ser menor al máximo.", duration: 2000 });
+      return;
     }
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("bet_config")
+        .upsert({
+          id: 1,
+          monto_minimo: form.monto_minimo,
+          monto_maximo: form.monto_maximo,
+          multiplicador_normal: form.multiplicador_normal,
+          multiplicador_comodin: form.multiplicador_comodin,
+        }, { onConflict: "id" });
 
-    if (isNaN(n) || n < 0 || n > 9) return;
-    setPyramid((prev) =>
-      prev.map((row, ri) =>
-        ri === r ? row.map((cell, ci) => (ci === c ? n : cell)) : row
-      )
-    );
+      if (error) throw error;
+
+      setConfig(form);
+      setIsDirty(false);
+      sileo.success({ title: "Configuración Guardada", description: "Los cambios se aplican en tiempo real al sitio público.", duration: 2000 });
+    } catch (err) {
+      console.error("Error saving bet_config:", err);
+      sileo.error({ title: "Error", description: "No se pudo guardar la configuración.", duration: 2000 });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
+  const handleReset = () => {
+    setForm(config);
+    setIsDirty(false);
+  };
+
+  /* Inline editable number cell */
+  const EditCell = ({
+    value,
+    onChange,
+    color = "text-blue-600",
+    prefix = "",
+    suffix = " Bs",
+    min = 1,
+  }: {
+    value: number | string;
+    onChange: (v: string) => void;
+    color?: string;
+    prefix?: string;
+    suffix?: string;
+    min?: number;
+  }) => (
+    <div className="flex items-center justify-end gap-2">
+      {prefix && <span className={`text-sm font-bold ${color}`}>{prefix}</span>}
+      <Input
+        type="number"
+        min={min}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-32 h-11 text-right text-base font-black border-2 border-slate-200 focus-visible:ring-blue-500 focus-visible:border-blue-500 shadow-sm transition-colors ${color}`}
+      />
+      <span className={`text-sm font-bold ${color}`}>{suffix}</span>
+    </div>
+  );
+
   return (
-    <div ref={containerRef}>
-      <div className="flex items-center justify-between mb-6">
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">La Pirámide</h2>
-          <p className="text-sm text-gray-500">Edita los dígitos de la pirámide invertida</p>
+          <h2 className="text-lg font-bold text-gray-900">Configuración de Apuestas</h2>
+          <p className="text-sm text-gray-500">Edita los valores directamente en la tabla — haz clic en cualquier número para modificarlo</p>
         </div>
-        <button
-          onClick={async () => {
-            if (editing) {
-              const hasEmpty = pyramid.some(row => row.some(cell => cell === ""));
-              if (hasEmpty) {
-                sileo.error({
-                  title: "Error de validación",
-                  description: "Ningún campo puede estar vacío antes de guardar.",
-                  duration: 1500
-                });
-                return;
-              }
-
-              try {
-                const cleanData = pyramid.map(row =>
-                  row.map(cell => typeof cell === "string" ? parseInt(cell) || 0 : Number(cell))
-                );
-
-                const { data: success, error } = await supabase.rpc("update_pyramid", {
-                  new_data: cleanData,
-                });
-
-                if (error) throw error;
-                if (!success) throw new Error("No rows updated");
-
-                sileo.success({
-                  title: "Cambios Guardados",
-                  description: "Pirámide actualizada con éxito en la base de datos.",
-                  duration: 1500
-                });
-                setEditing(false);
-              } catch (err) {
-                console.error("Error saving pyramid:", err);
-                sileo.error({
-                  title: "Error",
-                  description: "No se pudo guardar la pirámide en la base de datos.",
-                  duration: 2000
-                });
-              }
-            } else {
-              setEditing(true);
-            }
-          }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${editing
-            ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-            : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-        >
-          {editing ? <Save className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-          {editing ? "Guardar cambios" : "Editar pirámide"}
-        </button>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 relative">
-        {isLoading && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
+        {isDirty && (
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            Cambios sin guardar
+          </span>
         )}
-        <div className="flex flex-col items-center gap-1">
-          {pyramid.map((row, rowIdx) => (
-            <div key={rowIdx} className="flex gap-1">
-              {row.map((digit, colIdx) => {
-                const isYellow = (rowIdx + colIdx) % 2 === 0;
-                const color = isYellow ? YELLOW : GREEN;
-                return editing ? (
-                  <input
-                    key={colIdx}
-                    type="number"
-                    min={0}
-                    max={9}
-                    value={digit}
-                    onChange={(e) => updateCell(rowIdx, colIdx, e.target.value)}
-                    className="pyramid-cell w-10 h-10 text-center text-sm font-bold rounded border-2 bg-gray-100 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    style={{ borderColor: color.bg }}
-                  />
-                ) : (
-                  <div
-                    key={colIdx}
-                    className="pyramid-cell w-10 h-10 flex items-center justify-center text-sm font-bold rounded shadow-sm"
-                    style={{ backgroundColor: color.bg, color: color.text }}
-                  >
-                    {digit}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        {/* Leyenda */}
-        <div className="flex justify-center gap-6 mt-6">
-          {[["Positivo", YELLOW.bg], ["Suerte", GREEN.bg]].map(([label, bg]) => (
-            <span key={label as string} className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="inline-block w-4 h-4 rounded-sm" style={{ background: bg as string }} />
-              {label as string}
-            </span>
-          ))}
-        </div>
       </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      ) : (
+        <div className="space-y-5 max-w-2xl">
+
+          {/* Tabla de pagos — Jugada Normal */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 bg-blue-600 rounded-t-2xl">
+              <span className="text-sm font-bold text-white">🎯 Jugada Normal</span>
+              <span className="ml-auto text-[11px] text-blue-200 font-medium">Edita el valor en Bs</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/70">
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo de apuesta</th>
+                  <th className="text-right px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Pago por Bs apostado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {/* ×1 — editable base */}
+                <tr className="hover:bg-blue-50/40 transition-colors group">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">×1</span>
+                      Exacta individual
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <EditCell
+                      value={form.multiplicador_normal}
+                      onChange={(v) => handleChange("multiplicador_normal", v)}
+                      color="text-blue-600"
+                    />
+                  </td>
+                </tr>
+                {/* ×10 — calculado */}
+                <tr className="hover:bg-blue-50/40 transition-colors">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">×10</span>
+                      Por 10 unidades
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <span className="text-sm font-black text-blue-600">
+                      {(form.multiplicador_normal * 10).toLocaleString("es")} Bs
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">calculado automático</span>
+                  </td>
+                </tr>
+                {/* ×100 — calculado */}
+                <tr className="hover:bg-blue-50/40 transition-colors">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">×100</span>
+                      Por 100 unidades
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <span className="text-sm font-black text-blue-600">
+                      {(form.multiplicador_normal * 100).toLocaleString("es")} Bs
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">calculado automático</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tabla de pagos — Comodín */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 bg-purple-600 rounded-t-2xl">
+              <span className="text-sm font-bold text-white">🌟 Jugada Comodín</span>
+              <span className="ml-auto text-[11px] text-purple-200 font-medium">Edita el valor en Bs</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/70">
+                  <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tipo de apuesta</th>
+                  <th className="text-right px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Pago por Bs apostado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {/* ×1 — editable */}
+                <tr className="hover:bg-purple-50/40 transition-colors group">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">×1</span>
+                      Exacta comodín
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <EditCell
+                      value={form.multiplicador_comodin}
+                      onChange={(v) => handleChange("multiplicador_comodin", v)}
+                      color="text-purple-600"
+                    />
+                  </td>
+                </tr>
+                {/* ×10 — calculado */}
+                <tr className="hover:bg-purple-50/40 transition-colors">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">×10</span>
+                      Por 10 unidades
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <span className="text-sm font-black text-purple-600">
+                      {(form.multiplicador_comodin * 10).toLocaleString("es")} Bs
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">calculado automático</span>
+                  </td>
+                </tr>
+                {/* ×100 — calculado */}
+                <tr className="hover:bg-purple-50/40 transition-colors">
+                  <td className="px-5 py-4 font-medium text-gray-700">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">×100</span>
+                      Por 100 unidades
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <span className="text-sm font-black text-purple-600">
+                      {(form.multiplicador_comodin * 100).toLocaleString("es")} Bs
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">calculado automático</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Rango de apuesta */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3.5 bg-[#1f5650] rounded-t-2xl">
+              <span className="text-sm font-bold text-white">💰 Rango de Apuesta</span>
+              <span className="ml-auto text-[11px] text-emerald-200 font-medium">Mínimo y máximo permitidos</span>
+            </div>
+            <div className="p-5 grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Monto Mínimo</label>
+                <div className="flex items-center gap-3">
+                  <span className="text-base font-bold text-gray-400">Bs</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.monto_minimo}
+                    onChange={(e) => handleChange("monto_minimo", e.target.value)}
+                    className="flex-1 h-12 text-base font-black text-gray-800 border-2 border-slate-200 shadow-sm focus-visible:ring-blue-500 focus-visible:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Monto Máximo</label>
+                <div className="flex items-center gap-3">
+                  <span className="text-base font-bold text-gray-400">Bs</span>
+                  <Input
+                    type="number"
+                    min={form.monto_minimo + 1}
+                    value={form.monto_maximo}
+                    onChange={(e) => handleChange("monto_maximo", e.target.value)}
+                    className="flex-1 h-12 text-base font-black text-gray-800 border-2 border-slate-200 shadow-sm focus-visible:ring-blue-500 focus-visible:border-blue-500 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Botones */}
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={handleReset}
+              disabled={!isDirty || isSaving}
+              className="flex-1 py-3 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Descartar cambios
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!isDirty || isSaving}
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-blue-200"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" />
+                  </svg>
+                  Guardando...
+                </>
+              ) : (
+                <><Save className="h-4 w-4" /> Guardar configuración</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
+
 /* ════════════════════════════════════════════════════════════════
-   Sección 2 – Control de Pronósticos
+   Sección: Control de Pronósticos
 ══════════════════════════════════════════════════════════════════ */
+
+
+
 const seedForecasts = (): Forecast[] =>
   HOURS_LIST.map((hora, i) => ({
     id: i + 1,
@@ -1568,10 +1719,10 @@ const AdminDashboard = () => {
   const renderSection = () => {
     switch (activeSection) {
       case "dashboard": return <SectionDashboard />;
-      case "piramide": return <SectionPiramide />;
       case "pronosticos": return <SectionPronosticos />;
       case "sorteos": return <SectionSorteos />;
       case "historial": return <SectionHistorial />;
+      case "configuracion": return <SectionConfiguracion />;
     }
   };
 
@@ -1593,15 +1744,6 @@ const AdminDashboard = () => {
           popover: {
             title: "🏠 Dashboard",
             description: "Vista general del panel: estadísticas clave, últimos resultados y actividad reciente del sistema.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#tour-piramide",
-          popover: {
-            title: "🔺 La Pirámide",
-            description: "Edita los dígitos de la pirámide invertida. Haz clic en 'Editar pirámide' para modificar cada celda y guarda los cambios con Supabase.",
             side: "right",
             align: "start",
           },
@@ -1629,6 +1771,15 @@ const AdminDashboard = () => {
           popover: {
             title: "📋 Historial",
             description: "Consulta el registro completo de todos los sorteos en formato de cuadrícula por fecha y hora.",
+            side: "right",
+            align: "start",
+          },
+        },
+        {
+          element: "#tour-configuracion",
+          popover: {
+            title: "⚙️ Configuración",
+            description: "Ajusta los montos mínimos y máximos de apuesta permitidos. Los cambios se reflejan en tiempo real en el sitio público.",
             side: "right",
             align: "start",
           },

@@ -23,7 +23,7 @@ const Footer = () => {
 
           {/* Quick links */}
           <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-            {["Últimos Resultados", "Historial", "La Pirámide"].map((label) => (
+            {["Últimos Resultados", "Historial", "Probabilidades"].map((label) => (
               <a key={label} href="#" className="footer-link">
                 {label}
               </a>
