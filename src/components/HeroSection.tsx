@@ -5,6 +5,16 @@ import { formatAnimalNumber } from "@/lib/utils";
 import { useSorteos } from "@/hooks/useSorteos";
 
 /* ─── Helpers de tiempo ────────────────────────────────────────── */
+
+/** Hora y minuto actuales en zona horaria Venezuela (UTC-4), sin depender de la TZ del navegador. */
+function nowInVenezuela(): { h: number; m: number; s: number } {
+  const now = new Date();
+  // Venezuela es UTC-4 fijo (sin horario de verano)
+  const offsetMs = -4 * 60 * 60 * 1000;
+  const ve = new Date(now.getTime() + offsetMs + now.getTimezoneOffset() * 60 * 1000);
+  return { h: ve.getHours(), m: ve.getMinutes(), s: ve.getSeconds() };
+}
+
 function hourStrToNum(hourStr: string): number {
   const [timePart, period] = hourStr.split(" ");
   let [h] = timePart.split(":").map(Number);
@@ -13,25 +23,46 @@ function hourStrToNum(hourStr: string): number {
   return h;
 }
 
+/**
+ * Índice del sorteo activo = el último cuya hora YA pasó.
+ * Si aún no empezó ninguno (antes de las 8 AM) retorna 0.
+ */
 function getCurrentHourIndex(): number {
-  const currentH = new Date().getHours();
+  const { h } = nowInVenezuela();
   let best = -1;
   for (let i = 0; i < HOURS_LIST.length; i++) {
-    if (hourStrToNum(HOURS_LIST[i]) <= currentH) best = i;
+    if (hourStrToNum(HOURS_LIST[i]) <= h) best = i;
   }
   return best === -1 ? 0 : best;
 }
 
 function getTodayStr(): string {
-  return new Date().toISOString().split("T")[0];
+  // Fecha en Venezuela (UTC-4)
+  const now = new Date();
+  const offsetMs = -4 * 60 * 60 * 1000;
+  const ve = new Date(now.getTime() + offsetMs + now.getTimezoneOffset() * 60 * 1000);
+  return ve.toISOString().split("T")[0];
 }
 
-function secondsToNext(idx: number): number {
-  if (idx + 1 >= HOURS_LIST.length) return 0;
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(hourStrToNum(HOURS_LIST[idx + 1]), 0, 0, 0);
-  return Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+/**
+ * Segundos exactos hasta el PRÓXIMO sorteo a partir de ahora.
+ * Busca el primer sorteo cuya hora de inicio aún NO ha llegado.
+ * Si ya pasaron todos, retorna 0.
+ */
+function secondsToNext(activeIdx: number): number {
+  const { h, m, s } = nowInVenezuela();
+  const nowTotalSec = h * 3600 + m * 60 + s;
+
+  // Buscar el primer sorteo futuro (hora > hora actual)
+  for (let i = 0; i < HOURS_LIST.length; i++) {
+    const sorteoH = hourStrToNum(HOURS_LIST[i]);
+    const sorteoSec = sorteoH * 3600;
+    if (sorteoSec > nowTotalSec) {
+      return sorteoSec - nowTotalSec;
+    }
+  }
+  // Ya pasaron todos los sorteos del día
+  return 0;
 }
 
 /* ─── Partículas flotantes ─────────────────────────────────────── */

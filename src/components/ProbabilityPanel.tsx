@@ -23,16 +23,8 @@ function weightColor(weight: number): { bar: string; badge: string; text: string
 }
 
 export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) => {
-  const { proyeccion, weightedList, excludedYesterday, lastUpdated, refresh } = useProyeccion(results, 5, 30_000);
+  const { proyeccion, weightedList, excludedYesterday, lastUpdated, refresh } = useProyeccion(results, 5, 4 * 60 * 60 * 1000);
   const [currentPage, setCurrentPage] = useState(0);
-
-  // Countdown hasta próximo refresh (30 s)
-  const [countdown, setCountdown] = useState(30);
-  useEffect(() => {
-    setCountdown(30);
-    const id = setInterval(() => setCountdown((c) => (c <= 1 ? 30 : c - 1)), 1000);
-    return () => clearInterval(id);
-  }, [lastUpdated]);
 
   // Lista completa de referencia filtrando el excluido
   const referenceList = useMemo(() => {
@@ -71,17 +63,9 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
             </div>
             <div>
               <h2 className="text-xl font-bold tracking-tight text-white leading-none">Probabilidades</h2>
-              <p className="text-xs font-medium text-indigo-400 mt-0.5">Guía visible · Actualiza cada 30 s</p>
+              <p className="text-xs font-medium text-indigo-400 mt-0.5">Guía visible · Actualiza cada 4 horas</p>
             </div>
           </div>
-          <button
-            onClick={refresh}
-            title="Actualizar proyección ahora"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-800/50 border border-indigo-700/50 text-indigo-300 hover:bg-indigo-700/60 hover:text-white transition-all text-xs font-bold"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            {countdown}s
-          </button>
         </div>
       </div>
 
@@ -131,7 +115,7 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
-            Referencia de peso
+            Guía probable
           </p>
 
           {/* Paginación */}
