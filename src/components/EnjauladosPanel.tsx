@@ -20,7 +20,7 @@ export const EnjauladosPanel: React.FC<EnjauladosPanelProps> = ({ enjaulados }) 
     return list;
   }, [enjaulados, sortDesc]);
 
-  const itemsPerPage = 5;
+  const itemsPerPage = 8;
   const totalPages = Math.ceil(sortedEnjaulados.length / itemsPerPage);
   
   const startIndex = currentPage * itemsPerPage;
@@ -95,7 +95,7 @@ export const EnjauladosPanel: React.FC<EnjauladosPanelProps> = ({ enjaulados }) 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5 mt-2">
         <AnimatePresence mode="popLayout">
           {paginatedEnjaulados.map((animal, i) => (
             <motion.div
