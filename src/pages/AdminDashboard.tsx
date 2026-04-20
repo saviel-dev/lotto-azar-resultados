@@ -31,15 +31,22 @@ import {
   Menu,
   Map,
   Settings,
+  Sliders,
+  Cpu,
+  Hand,
+  RefreshCw,
+  Zap,
 } from "lucide-react";
 import {
   ANIMALS,
+  ANIMAL_WEIGHTS,
   HOURS_LIST,
   generateResults,
   type LotteryResult,
 } from "@/data/mockData";
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
+import { LS_WEIGHTS_KEY, type SorteoMode } from "@/hooks/useProyeccion";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 const ALL_ANIMALS = ANIMALS.map((a) => a.name);
@@ -634,7 +641,7 @@ const SectionConfiguracion = () => {
             </div>
           </div>
 
-          {/* Botones */}
+          {/* Botones apuestas */}
           <div className="flex gap-3 pt-1">
             <button
               onClick={handleReset}
@@ -660,8 +667,176 @@ const SectionConfiguracion = () => {
               )}
             </button>
           </div>
+
+          {/* ── Configuración de Probabilidades de Sorteo ────── */}
+          <SorteoConfigPanel />
         </div>
       )}
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   Sub-panel: Configuración de Probabilidades & Modo Sorteo
+══════════════════════════════════════════════════════════════════ */
+
+// Top-10 animales por peso por defecto para edición rápida
+const TOP_EDITABLE_ANIMALS = Object.entries(ANIMAL_WEIGHTS)
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 10)
+  .map(([name]) => name);
+
+const LS_MODE_KEY = "lotto_sorteo_mode";
+
+const SorteoConfigPanel = () => {
+  const [mode, setModeState] = useState<SorteoMode>(() => {
+    return (localStorage.getItem(LS_MODE_KEY) as SorteoMode) ?? "auto";
+  });
+
+  const [weights, setWeights] = useState<Record<string, number>>(() => {
+    try {
+      const raw = localStorage.getItem(LS_WEIGHTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, number>;
+        return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Math.max(10, v)]));
+      }
+    } catch {}
+    return Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(10, v)]));
+  });
+
+  const [saved, setSaved] = useState(false);
+
+  const handleModeChange = (newMode: SorteoMode) => {
+    setModeState(newMode);
+    localStorage.setItem(LS_MODE_KEY, newMode);
+  };
+
+  const handleWeightChange = (name: string, value: number) => {
+    setWeights(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveWeights = () => {
+    localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    sileo.success({ title: "Probabilidades guardadas", description: "Los % de salida se actualizarán en el próximo sorteo.", duration: 2000 });
+  };
+
+  const handleResetWeights = () => {
+    setWeights(Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(10, v)])));
+    localStorage.removeItem(LS_WEIGHTS_KEY);
+    sileo.success({ title: "Probabilidades restauradas", description: "Se han restablecido los valores por defecto.", duration: 2000 });
+  };
+
+  const animalData = (name: string) => ANIMALS.find(a => a.name === name) ?? { emoji: "🐾", name, number: "?" };
+  const maxW = Math.max(...TOP_EDITABLE_ANIMALS.map(n => weights[n] ?? ANIMAL_WEIGHTS[n] ?? 10));
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3.5 bg-violet-600 rounded-t-2xl">
+        <Sliders className="h-4 w-4 text-white" />
+        <span className="text-sm font-bold text-white">⚙️ Probabilidades de Sorteo</span>
+        <span className="ml-auto text-[11px] text-violet-200 font-medium">Probabilidad por animal</span>
+      </div>
+
+      <div className="p-5 space-y-6">
+        {/* Modo de sorteo */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Modo del Sorteo</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleModeChange("auto")}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                mode === "auto"
+                  ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-200"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-emerald-400"
+              }`}
+            >
+              <Cpu className="h-4 w-4" />
+              Automático
+            </button>
+            <button
+              onClick={() => handleModeChange("manual")}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                mode === "manual"
+                  ? "bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-amber-400"
+              }`}
+            >
+              <Hand className="h-4 w-4" />
+              Manual
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-2">
+            {mode === "auto"
+              ? "✅ La proyección actualiza automáticamente cada 4 horas."
+              : "✋ La proyección solo cambia al presionar 'Iniciar sorteo' en el panel público."}
+          </p>
+        </div>
+
+        {/* Sliders de Probabilidad – top 10 */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Probabilidad — Top 10</p>
+          <p className="text-[11px] text-gray-400 mb-4">Valores más altos = más probable en la proyección. Escala libre, el sistema normaliza automáticamente.</p>
+          <div className="space-y-4">
+            {TOP_EDITABLE_ANIMALS.map(name => {
+              const a = animalData(name);
+              const w = Math.max(10, weights[name] ?? ANIMAL_WEIGHTS[name] ?? 10);
+              return (
+                <div key={name} className="flex items-center gap-3">
+                  <span className="text-xl w-7 text-center leading-none shrink-0">{a.emoji}</span>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-semibold text-gray-700 truncate max-w-[120px]">{name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-violet-500 font-bold">Probabilidad:</span>
+                        <input
+                          type="number"
+                          min={10}
+                          max={100}
+                          value={w}
+                          onChange={e => handleWeightChange(name, Math.max(10, Math.min(100, parseInt(e.target.value) || 10)))}
+                          className="w-14 h-6 text-xs text-center border border-gray-200 rounded-md font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      value={w}
+                      onChange={e => handleWeightChange(name, parseInt(e.target.value))}
+                      className="w-full h-1.5 rounded-full accent-violet-600 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={handleResetWeights}
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-medium rounded-xl transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Restaurar
+          </button>
+          <button
+            onClick={handleSaveWeights}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-md ${
+              saved
+                ? "bg-emerald-600 text-white shadow-emerald-200"
+                : "bg-violet-600 hover:bg-violet-700 text-white shadow-violet-200"
+            }`}
+          >
+            <Save className="h-4 w-4" />
+            {saved ? "¡Guardado!" : "Guardar probabilidades"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1126,8 +1301,64 @@ const SectionSorteos = () => {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(blankSorteoForm());
   const [search, setSearch] = useState("");
+  const [scannerInput, setScannerInput] = useState("");
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ─── Fast Entry Scanner ──────────────────────────────────────────
+  const handleScannerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scannerInput.trim()) return;
+
+    // Buscar el animal por número (soportando "0" o "00", "01" etc)
+    const animalMatch = ANIMALS.find(
+      (a) => String(a.number).padStart(2, "0") === scannerInput.trim().padStart(2, "0")
+          || String(a.number) === scannerInput.trim()
+    );
+
+    if (!animalMatch) {
+      sileo.error({ title: "No encontrado", description: "El número no corresponde a ningún animal.", duration: 2000 });
+      setScannerInput("");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const hoursCoveredToday = new Set(results.filter(r => r.date === today).map(r => r.hour));
+      
+      let targetHour = HOURS_LIST[0];
+      for (const h of HOURS_LIST) {
+        if (!hoursCoveredToday.has(h)) {
+          targetHour = h;
+          break;
+        }
+      }
+
+      const { error } = await supabase.rpc("upsert_sorteo", {
+        p_animal: animalMatch.name,
+        p_numero: parseInt(animalMatch.number || "0", 10),
+        p_hora: targetHour,
+        p_fecha: today,
+        p_emoji: animalMatch.emoji,
+      });
+
+      if (error) throw error;
+      
+      sileo.success({ title: "¡Ganador Registrado!", description: `${animalMatch.emoji} ${animalMatch.name} (${targetHour})`, duration: 3000 });
+      setScannerInput("");
+      
+      // Refresh
+      const fresh = await refreshSorteos();
+      setResults(fresh);
+      
+    } catch (err) {
+      console.error("Error al registrar por escáner:", err);
+      sileo.error({ title: "Error", description: "No se pudo registrar el resultado.", duration: 2000 });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // ─── Helpers ────────────────────────────────────────────────────
   const mapRow = (row: any): LotteryResult => ({
@@ -1389,8 +1620,9 @@ const SectionSorteos = () => {
         </div>
       )}
 
-      {/* ── Search ────────────────────────────────────────────── */}
-      <div className="mb-4">
+      {/* ── Acciones Superiores (Buscar / Escanear) ────────────────────────────────────────────── */}
+      <div className="mb-4 flex flex-col sm:flex-row gap-4">
+        {/* Búsqueda normal */}
         <input
           type="text"
           placeholder="Buscar por animal, fecha o número..."
@@ -1398,6 +1630,25 @@ const SectionSorteos = () => {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-72 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
+
+        {/* Módulo Escáner (Ingreso Rápido) */}
+        <form onSubmit={handleScannerSubmit} className="flex-1 max-w-sm flex">
+          <div className="relative w-full">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Zap className="h-4 w-4 text-amber-500" />
+            </div>
+            <input
+              type="text"
+              placeholder="Escáner/Número + Enter"
+              title="Ingresa el número para lanzar el animal automáticamente a la ronda más cercana"
+              value={scannerInput}
+              onChange={(e) => setScannerInput(e.target.value)}
+              disabled={isSaving}
+              autoFocus
+              className="w-full pl-9 pr-3 py-2 border-2 border-amber-300 rounded-lg text-sm font-bold text-amber-900 bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 disabled:opacity-50 transition-colors placeholder:text-amber-600/50"
+            />
+          </div>
+        </form>
       </div>
 
       {/* ── Main grid ─────────────────────────────────────────── */}

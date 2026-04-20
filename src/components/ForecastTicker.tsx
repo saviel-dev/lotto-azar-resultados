@@ -95,24 +95,27 @@ const ForecastTicker = () => {
                   Calculando proyección…
                 </span>
               ) : (
-                proyeccion.map((p, i) => (
-                  <motion.div
-                    key={`${p.name}-${i}`}
-                    initial={{ opacity: 0, scale: 0.7 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.07, duration: 0.25 }}
-                    className="flex shrink-0 items-center gap-1.5 bg-card border border-border rounded px-2 py-1 shadow-sm"
-                    title={`${p.name} · Peso ${p.weight} · ${p.probability.toFixed(1)}%`}
-                  >
-                    <span className="text-sm sm:text-base leading-none drop-shadow-sm">{p.emoji}</span>
-                    <span className="text-[11px] sm:text-xs font-bold text-foreground leading-none">
-                      {p.name}
-                    </span>
-                    <span className="text-[9px] font-black text-muted-foreground leading-none ml-0.5 hidden sm:inline">
-                      {Math.min(75, (p.probability / 100) * 75).toFixed(0)}
-                    </span>
-                  </motion.div>
-                ))
+                proyeccion.map((p, i) => {
+                  return (
+                    <motion.div
+                      key={`${p.name}-${i}`}
+                      initial={{ opacity: 0, scale: 0.7 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.07, duration: 0.25 }}
+                      className="flex shrink-0 items-center gap-1.5 bg-card border border-border rounded px-2 py-1 shadow-sm"
+                      title={`Proyección activa: ${p.name} · Número: ${p.number}`}
+                    >
+                      <span className="text-sm sm:text-base leading-none drop-shadow-sm">{p.emoji}</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-foreground leading-none">
+                        {p.name}
+                      </span>
+                      {/* Número — visible en todos los tamaños */}
+                      <span className="text-[10px] font-black text-muted-foreground leading-none ml-0.5">
+                        {p.number}
+                      </span>
+                    </motion.div>
+                  );
+                })
               )}
             </motion.div>
           )}

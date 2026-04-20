@@ -1,26 +1,31 @@
 /**
  * useProyeccion — Motor de proyección aleatoria con pesos configurables.
  *
- * Reglas:
- *  1. Cada animal tiene un peso (ANIMAL_WEIGHTS en mockData) que determina su probabilidad.
- *  2. El animal que salió AYER queda EXCLUIDO de la proyección de hoy.
- *  3. La selección es aleatoria pero controlada por los pesos.
- *  4. La proyección se regenera automáticamente cada `refreshMs` ms (por defecto cada 30 s),
- *     y también puede forzarse manualmente con `refresh()`.
- *  5. El hook expone `weightedList` (todos los animales con su peso y % normalizado)
+ *  1. Cada animal tiene un peso numérico (ANIMAL_WEIGHTS en mockData) que determina su probabilidad.
+ *     Estos valores se pueden sobreescribir vía localStorage key "lotto_weights".
+ *  2. El animal que salió AYER y los que ya salieron HOY quedan EXCLUIDOS de la proyección actual.
+ *  3. La selección es aleatoria pero controlada por su probabilidad.
+ *  4. En modo "auto" la proyección se regenera automáticamente cada `refreshMs` ms
+ *     (por defecto cada 4 horas). En modo "manual" solo se actualiza al llamar refresh().
+ *  5. El hook expone `weightedList` (top animales con su porcentaje de salida)
  *     para que la UI lo muestre al jugador.
+ *  6. Si un animal sale en el resultado real de hoy, desaparece automáticamente de las probabilidades activas.
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ANIMALS, ANIMAL_WEIGHTS, type LotteryResult } from "@/data/mockData";
+
+/* ─── Constantes ─────────────────────────────────────────── */
+export const LS_WEIGHTS_KEY = "lotto_weights";
+export const DEFAULT_REFRESH_MS = 4 * 60 * 60 * 1000; // 4 horas
 
 /* ─── Tipos públicos ─────────────────────────────────────── */
 export interface AnimalWeight {
   name: string;
   emoji: string;
   number: string;
-  weight: number;       // peso crudo configurado
-  probability: number;  // porcentaje normalizado 0-100 sobre el pool activo
+  weight: number;       // peso crudo configurado (% de salida interno)
+  probability: number;  // porcentaje de salida normalizado 0-100 sobre el pool activo
   isExcluded: boolean;  // true si fue el resultado de ayer
 }
 
@@ -32,17 +37,29 @@ export interface ProyeccionItem {
   probability: number;
 }
 
+export type SorteoMode = "auto" | "manual";
+
 export interface UseProyeccionResult {
-  /** Lista completa con pesos y probabilidades para mostrar al jugador */
+  /** Lista completa con probabilidades de salida para mostrar al jugador */
   weightedList: AnimalWeight[];
   /** Los N animales proyectados para el próximo sorteo */
   proyeccion: ProyeccionItem[];
   /** Animal del día anterior excluido */
   excludedYesterday: string | null;
+  /** Animales del día de hoy excluidos */
+  excludedToday: string[];
   /** Último instante en que se actualizó la proyección */
   lastUpdated: Date;
-  /** Fuerza una nueva proyección inmediatamente */
+  /** Fuerza una nueva proyección inmediatamente (sirve en ambos modos) */
   refresh: () => void;
+  /** Modo actual del sorteo */
+  mode: SorteoMode;
+  /** Cambia el modo auto/manual */
+  setMode: (m: SorteoMode) => void;
+  /** Pesos activos (pueden estar sobreescritos desde admin) */
+  activeWeights: Record<string, number>;
+  /** Actualiza los pesos y los persiste en localStorage */
+  updateWeights: (weights: Record<string, number>) => void;
 }
 
 /* ─── Helper: weighted random selection sin repetidos ────── */
@@ -79,45 +96,78 @@ function yesterdayStr(): string {
   return d.toISOString().split("T")[0];
 }
 
+/* ─── Helper: obtener la fecha de hoy en formato ISO ────── */
+function todayStr(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+/* ─── Helper: cargar pesos desde localStorage ─────────────── */
+function loadWeightsFromStorage(): Record<string, number> | null {
+  try {
+    const raw = localStorage.getItem(LS_WEIGHTS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    return null;
+  }
+}
+
 /* ════════════════════════════════════════════════════════════
    Hook principal
 ══════════════════════════════════════════════════════════════ */
 export function useProyeccion(
   results: LotteryResult[],
   proyeccionCount = 5,
-  refreshMs = 30_000
+  refreshMs = DEFAULT_REFRESH_MS
 ): UseProyeccionResult {
-  const [seed, setSeed] = useState(0); // incrementar para forzar re-generación
+  const [seed, setSeed] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [mode, setMode] = useState<SorteoMode>("auto");
+
+  // Pesos con override de localStorage
+  const [customWeights, setCustomWeights] = useState<Record<string, number> | null>(
+    () => loadWeightsFromStorage()
+  );
+
+  const activeWeights = useMemo<Record<string, number>>(() => {
+    const rawWeights = customWeights ? { ...ANIMAL_WEIGHTS, ...customWeights } : ANIMAL_WEIGHTS;
+    return Object.fromEntries(
+      Object.entries(rawWeights).map(([k, v]) => [k, Math.max(10, v)])
+    );
+  }, [customWeights]);
 
   /* ── Animal excluido: el que salió ayer ─────────────────── */
   const excludedYesterday = useMemo<string | null>(() => {
     const yest = yesterdayStr();
-    // Buscar el resultado más reciente de ayer (último sorteo del día)
     const yesterdayResults = (results || []).filter((r) => r.date === yest);
     if (yesterdayResults.length === 0) return null;
-    // Tomamos el último sorteo de ayer (por hora descendente)
     const sorted = [...yesterdayResults].sort((a, b) =>
       b.hour.localeCompare(a.hour)
     );
     return sorted[0].animal;
   }, [results]);
 
-  /* ── Pool activo: todos los animales con peso, excluyendo ayer ── */
-  const activePool = useMemo(() => {
-    return ANIMALS.filter((a) => a.name !== excludedYesterday).map((a) => ({
-      name: a.name,
-      weight: ANIMAL_WEIGHTS[a.name] ?? 10,
-    }));
-  }, [excludedYesterday]);
+  /* ── Animales excluidos: los que ya salieron hoy ─────────────────── */
+  const excludedToday = useMemo<string[]>(() => {
+    const today = todayStr();
+    return (results || []).filter((r) => r.date === today).map((r) => r.animal);
+  }, [results]);
 
-  /* ── Lista completa con probabilidades visibles ──────────── */
+  /* ── Pool activo: todos los animales con probabilidad, excluyendo ayer y HOY ── */
+  const activePool = useMemo(() => {
+    return ANIMALS.filter((a) => a.name !== excludedYesterday && !excludedToday.includes(a.name)).map((a) => ({
+      name: a.name,
+      weight: activeWeights[a.name] ?? 10,
+    }));
+  }, [excludedYesterday, excludedToday, activeWeights]);
+
+  /* ── Lista completa con probabilidades de salida ──────────── */
   const weightedList = useMemo<AnimalWeight[]>(() => {
     const activeTotal = activePool.reduce((s, a) => s + a.weight, 0);
 
     return ANIMALS.map((a) => {
-      const rawWeight = ANIMAL_WEIGHTS[a.name] ?? 10;
-      const isExcluded = a.name === excludedYesterday;
+      const rawWeight = activeWeights[a.name] ?? 10;
+      const isExcluded = a.name === excludedYesterday || excludedToday.includes(a.name);
       const effectiveWeight = isExcluded ? 0 : rawWeight;
       const probability =
         activeTotal > 0 && !isExcluded
@@ -132,18 +182,18 @@ export function useProyeccion(
         probability,
         isExcluded,
       };
-    }).sort((a, b) => b.weight - a.weight); // ordenar por peso descendente
-  }, [activePool, excludedYesterday, seed]); // seed para forzar recalculación visual
+    }).sort((a, b) => b.weight - a.weight);
+  // seed incluido para forzar recalculación visual al cambiar probabilidades
+  }, [activePool, excludedYesterday, excludedToday, activeWeights, seed]);
 
   /* ── Proyección actual (aleatoria, controlada por pesos) ─── */
   const proyeccion = useMemo<ProyeccionItem[]>(() => {
-    // seed hace que se recalcule en cada refresh
-    void seed;
+    void seed; // seed hace que se recalcule en cada refresh
 
     const selected = weightedSample(activePool, proyeccionCount);
     return selected.map((name) => {
       const animal = ANIMALS.find((a) => a.name === name)!;
-      const weight = ANIMAL_WEIGHTS[name] ?? 10;
+      const weight = activeWeights[name] ?? 10;
       const activeTotal = activePool.reduce((s, a) => s + a.weight, 0);
       return {
         name,
@@ -153,7 +203,7 @@ export function useProyeccion(
         probability: activeTotal > 0 ? (weight / activeTotal) * 100 : 0,
       };
     });
-  }, [activePool, seed]);
+  }, [activePool, activeWeights, seed]);
 
   /* ── Refresh manual ─────────────────────────────────────── */
   const refresh = useCallback(() => {
@@ -161,11 +211,36 @@ export function useProyeccion(
     setLastUpdated(new Date());
   }, []);
 
-  /* ── Auto-refresh periódico ──────────────────────────────── */
+  /* ── Auto-refresh periódico (solo en modo auto) ──────────── */
   useEffect(() => {
+    if (mode !== "auto") return;
     const id = setInterval(refresh, refreshMs);
     return () => clearInterval(id);
-  }, [refresh, refreshMs]);
+  }, [refresh, refreshMs, mode]);
 
-  return { weightedList, proyeccion, excludedYesterday, lastUpdated, refresh };
+  /* ── Persistir pesos personalizados ─────────────────────── */
+  const updateWeights = useCallback((weights: Record<string, number>) => {
+    setCustomWeights(weights);
+    try {
+      localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights));
+    } catch {
+      // silenciar errores de storage
+    }
+    // Forzar regeneración de proyección con nuevos pesos
+    setSeed((s) => s + 1);
+    setLastUpdated(new Date());
+  }, []);
+
+  return {
+    weightedList,
+    proyeccion,
+    excludedYesterday,
+    excludedToday,
+    lastUpdated,
+    refresh,
+    mode,
+    setMode,
+    activeWeights,
+    updateWeights,
+  };
 }
