@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { type LotteryResult } from '@/data/mockData';
-import { TrendingUp, Ban, Zap, ChevronLeft, ChevronRight, Play, RotateCcw, Cpu, Hand } from 'lucide-react';
+import { TrendingUp, Ban, Zap, ChevronLeft, ChevronRight, Cpu, Hand } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatAnimalNumber } from '@/lib/utils';
 import { useProyeccion } from '@/hooks/useProyeccion';
@@ -21,7 +21,6 @@ function weightColor(weight: number): { bar: string; badge: string; text: string
 export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) => {
   const { proyeccion, weightedList, excludedYesterday, lastUpdated, refresh, mode, setMode } = useProyeccion(results, 5, 4 * 60 * 60 * 1000);
   const [currentPage, setCurrentPage] = useState(0);
-  const [isSorteando, setIsSorteando] = useState(false);
 
   // Top-26 animales (Guía probable) por probabilidad, excluyendo los ya sorteados
   const referenceList = useMemo(() => {
@@ -45,12 +44,6 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
 
   const maxWeight = referenceList.length > 0 ? referenceList[0].weight : 1;
 
-  // Animación del botón de sorteo
-  const handleSortear = () => {
-    setIsSorteando(true);
-    refresh();
-    setTimeout(() => setIsSorteando(false), 800);
-  };
 
   const handleModeToggle = () => {
     setMode(mode === 'auto' ? 'manual' : 'auto');
@@ -96,40 +89,6 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
           </button>
         </div>
 
-        {/* Botón sortear ahora */}
-        <motion.button
-          onClick={handleSortear}
-          whileTap={{ scale: 0.95 }}
-          disabled={isSorteando}
-          id="btn-sortear-ahora"
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-60 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-900/40 border border-indigo-500/30"
-        >
-          <AnimatePresence mode="wait">
-            {isSorteando ? (
-              <motion.span
-                key="spinning"
-                initial={{ opacity: 0, rotate: -90 }}
-                animate={{ opacity: 1, rotate: 0 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <RotateCcw className="w-4 h-4 animate-spin" />
-                Sorteando…
-              </motion.span>
-            ) : (
-              <motion.span
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <Play className="w-4 h-4" />
-                {mode === 'auto' ? 'Sortear ahora (forzar)' : 'Iniciar sorteo'}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
       </div>
 
       {/* ── Proyección activa ────────────────────────────────── */}
