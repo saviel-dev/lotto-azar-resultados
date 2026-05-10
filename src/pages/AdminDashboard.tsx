@@ -18,6 +18,7 @@ import {
   History,
   LogOut,
   ChevronRight,
+  ChevronLeft,
   Plus,
   Pencil,
   Trash2,
@@ -36,6 +37,11 @@ import {
   Hand,
   RefreshCw,
   Zap,
+  ImagePlay,
+  BarChart3,
+  ToggleLeft,
+  ToggleRight,
+  Search,
 } from "lucide-react";
 import {
   ANIMALS,
@@ -47,13 +53,15 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { LS_WEIGHTS_KEY, type SorteoMode } from "@/hooks/useProyeccion";
+import { SectionCarrusel as SectionCarruselAdmin } from "@/components/SectionCarrusel";
+import { useProbabilidades, type ProbabilidadRow, PROB_UPDATED_EVENT } from "@/hooks/useProbabilidades";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 const ALL_ANIMALS = ANIMALS.map((a) => a.name);
 
 const LOTTERY_NAMES = ["Ardilla", "León", "Camello", "Vaca"];
 
-type Section = "dashboard" | "configuracion" | "pronosticos" | "sorteos" | "historial";
+type Section = "dashboard" | "configuracion" | "pronosticos" | "sorteos" | "historial" | "carrusel" | "probabilidades";
 
 interface Forecast {
   id: number;
@@ -69,6 +77,8 @@ const navItems: { id: Section; icon: React.ElementType; label: string }[] = [
   { id: "pronosticos", icon: Radio, label: "Control de Pronósticos" },
   { id: "sorteos", icon: Trophy, label: "Sorteos" },
   { id: "historial", icon: History, label: "Historial" },
+  { id: "carrusel", icon: ImagePlay, label: "Carrusel" },
+  { id: "probabilidades", icon: BarChart3, label: "Probabilidades" },
   { id: "configuracion", icon: Settings, label: "Configuración" },
 ];
 
@@ -475,10 +485,11 @@ const SectionConfiguracion = () => {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
         </div>
       ) : (
-        <div className="space-y-5 max-w-2xl">
+        <div className="space-y-5 w-full max-w-6xl">
 
-          {/* Tabla de pagos — Jugada Normal */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+            {/* Tabla de pagos — Jugada Normal */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
             <div className="flex items-center gap-2 px-5 py-3.5 bg-blue-600 rounded-t-2xl">
               <span className="text-sm font-bold text-white">🎯 Jugada Normal</span>
               <span className="ml-auto text-[11px] text-blue-200 font-medium">Edita el valor en Bs</span>
@@ -539,10 +550,10 @@ const SectionConfiguracion = () => {
                 </tr>
               </tbody>
             </table>
-          </div>
+            </div>
 
-          {/* Tabla de pagos — Comodín */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Tabla de pagos — Comodín */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
             <div className="flex items-center gap-2 px-5 py-3.5 bg-purple-600 rounded-t-2xl">
               <span className="text-sm font-bold text-white">🌟 Jugada Comodín</span>
               <span className="ml-auto text-[11px] text-purple-200 font-medium">Edita el valor en Bs</span>
@@ -603,6 +614,7 @@ const SectionConfiguracion = () => {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Rango de apuesta */}
@@ -698,11 +710,12 @@ const SorteoConfigPanel = () => {
       const raw = localStorage.getItem(LS_WEIGHTS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, number>;
-        return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Math.max(10, v)]));
+        return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Math.max(0, Math.min(100, v))]));
       }
     } catch {}
-    return Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(10, v)]));
+    return Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(0, Math.min(100, v))]));
   });
+  const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
 
   const [saved, setSaved] = useState(false);
 
@@ -717,14 +730,18 @@ const SorteoConfigPanel = () => {
 
   const handleSaveWeights = () => {
     localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights));
+    window.dispatchEvent(new Event("lotto-weights-updated"));
+    setWeightDrafts({});
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     sileo.success({ title: "Probabilidades guardadas", description: "Los % de salida se actualizarán en el próximo sorteo.", duration: 2000 });
   };
 
   const handleResetWeights = () => {
-    setWeights(Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(10, v)])));
+    setWeights(Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(0, Math.min(100, v))])));
+    setWeightDrafts({});
     localStorage.removeItem(LS_WEIGHTS_KEY);
+    window.dispatchEvent(new Event("lotto-weights-updated"));
     sileo.success({ title: "Probabilidades restauradas", description: "Se han restablecido los valores por defecto.", duration: 2000 });
   };
 
@@ -781,7 +798,7 @@ const SorteoConfigPanel = () => {
           <div className="space-y-4">
             {TOP_EDITABLE_ANIMALS.map(name => {
               const a = animalData(name);
-              const w = Math.max(10, weights[name] ?? ANIMAL_WEIGHTS[name] ?? 10);
+              const w = Math.max(0, Math.min(100, weights[name] ?? ANIMAL_WEIGHTS[name] ?? 0));
               return (
                 <div key={name} className="flex items-center gap-3">
                   <span className="text-xl w-7 text-center leading-none shrink-0">{a.emoji}</span>
@@ -792,20 +809,37 @@ const SorteoConfigPanel = () => {
                         <span className="text-[10px] text-violet-500 font-bold">Probabilidad:</span>
                         <input
                           type="number"
-                          min={10}
+                          min={0}
                           max={100}
-                          value={w}
-                          onChange={e => handleWeightChange(name, Math.max(10, Math.min(100, parseInt(e.target.value) || 10)))}
+                          value={weightDrafts[name] ?? String(w)}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setWeightDrafts((prev) => ({ ...prev, [name]: raw }));
+                            if (raw === "") return;
+                            const parsed = parseInt(raw, 10);
+                            if (Number.isNaN(parsed)) return;
+                            handleWeightChange(name, Math.max(0, Math.min(100, parsed)));
+                          }}
+                          onBlur={() => {
+                            const raw = weightDrafts[name];
+                            if (raw === "") {
+                              setWeightDrafts((prev) => ({ ...prev, [name]: String(w) }));
+                            }
+                          }}
                           className="w-14 h-6 text-xs text-center border border-gray-200 rounded-md font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400"
                         />
                       </div>
                     </div>
                     <input
                       type="range"
-                      min={10}
+                      min={0}
                       max={100}
                       value={w}
-                      onChange={e => handleWeightChange(name, parseInt(e.target.value))}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        handleWeightChange(name, value);
+                        setWeightDrafts((prev) => ({ ...prev, [name]: String(value) }));
+                      }}
                       className="w-full h-1.5 rounded-full accent-violet-600 cursor-pointer"
                     />
                   </div>
@@ -841,6 +875,509 @@ const SorteoConfigPanel = () => {
   );
 };
 
+
+/* ════════════════════════════════════════════════════════════════
+   Sección: Probabilidades (CRUD completo)
+══════════════════════════════════════════════════════════════════ */
+const PROB_COLOR = (peso: number) => {
+  if (peso >= 28) return { bar: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  if (peso >= 18) return { bar: "bg-blue-500",    badge: "bg-blue-50 text-blue-700 border-blue-200" };
+  if (peso >= 10) return { bar: "bg-violet-500",  badge: "bg-violet-50 text-violet-700 border-violet-200" };
+  return             { bar: "bg-slate-400",       badge: "bg-slate-50 text-slate-600 border-slate-200" };
+};
+
+const blankProbForm = () => ({
+  animal: "",
+  emoji: "🐾",
+  numero: "",
+  peso: 10,
+  activo: true,
+});
+
+const SectionProbabilidades = () => {
+  const { rows, isLoading, error, refetch } = useProbabilidades();
+  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editRow, setEditRow] = useState<ProbabilidadRow | null>(null);
+  const [form, setForm] = useState(blankProbForm());
+  const [isSaving, setIsSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Filtrado por búsqueda
+  const filtered = rows.filter((r) =>
+    r.animal.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  
+  // Update current page if it goes out of bounds after filtering/deleting
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const currentItems = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const openAdd = () => {
+    setEditRow(null);
+    setForm(blankProbForm());
+    setModalOpen(true);
+  };
+
+  const openEdit = (row: ProbabilidadRow) => {
+    setEditRow(row);
+    setForm({ animal: row.animal, emoji: row.emoji, numero: row.numero, peso: row.peso, activo: row.activo });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => { setModalOpen(false); setEditRow(null); };
+
+  const handleSave = async () => {
+    if (!form.animal.trim()) {
+      sileo.error({ title: "Campo requerido", description: "El nombre del animal es obligatorio.", duration: 2000 });
+      return;
+    }
+    if (form.peso < 0 || form.peso > 100) {
+      sileo.error({ title: "Peso inválido", description: "El peso debe estar entre 0 y 100.", duration: 2000 });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc("upsert_probabilidad", {
+        p_animal: form.animal.trim(),
+        p_emoji: form.emoji.trim() || "🐾",
+        p_numero: form.numero.trim(),
+        p_peso: form.peso,
+        p_activo: form.activo,
+      });
+      if (rpcErr) throw rpcErr;
+      window.dispatchEvent(new Event(PROB_UPDATED_EVENT));
+      await refetch();
+      sileo.success({
+        title: editRow ? "Probabilidad actualizada" : "Probabilidad creada",
+        description: `${form.animal} — peso ${form.peso}`,
+        duration: 2000,
+      });
+      closeModal();
+    } catch (err: any) {
+      sileo.error({ title: "Error al guardar", description: err?.message ?? "Error desconocido", duration: 3000 });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setIsDeleting(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc("delete_probabilidad", { p_id: id });
+      if (rpcErr) throw rpcErr;
+      window.dispatchEvent(new Event(PROB_UPDATED_EVENT));
+      await refetch();
+      setDeleteId(null);
+      sileo.success({ title: "Eliminado", description: "La probabilidad fue removida.", duration: 2000 });
+    } catch (err: any) {
+      sileo.error({ title: "Error al eliminar", description: err?.message ?? "Error desconocido", duration: 3000 });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleToggleActivo = async (row: ProbabilidadRow) => {
+    try {
+      const { error: rpcErr } = await supabase.rpc("upsert_probabilidad", {
+        p_animal: row.animal,
+        p_emoji: row.emoji,
+        p_numero: row.numero,
+        p_peso: row.peso,
+        p_activo: !row.activo,
+      });
+      if (rpcErr) throw rpcErr;
+      window.dispatchEvent(new Event(PROB_UPDATED_EVENT));
+      await refetch();
+    } catch (err: any) {
+      sileo.error({ title: "Error", description: err?.message ?? "No se pudo cambiar el estado.", duration: 2000 });
+    }
+  };
+
+  // Reset pagination on search
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const maxPeso = rows.length > 0 ? Math.max(...rows.map((r) => r.peso)) : 100;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Probabilidades</h2>
+          <p className="text-sm text-gray-500">Gestiona el peso de probabilidad de cada animal — los cambios se reflejan en tiempo real en el sitio público</p>
+        </div>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors shadow-md shadow-violet-200 shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+          Nueva probabilidad
+        </button>
+      </div>
+
+      {/* Search + stats bar */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar animal..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent bg-white"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500 bg-white border border-gray-100 rounded-xl px-4 py-2.5 font-medium shrink-0">
+          <BarChart3 className="h-4 w-4 text-violet-500" />
+          <span><strong className="text-gray-800">{rows.filter(r => r.activo).length}</strong> activos</span>
+          <span className="text-gray-300">|</span>
+          <span><strong className="text-gray-800">{rows.length}</strong> total</span>
+        </div>
+      </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 flex items-center gap-2">
+          <span className="font-semibold">⚠️ Aviso:</span> La tabla aún no existe en Supabase. Ejecuta el SQL <code className="bg-amber-100 px-1 rounded">08_probabilidades.sql</code> para habilitarla.
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+        <div className="flex items-center gap-2 px-5 py-3.5 bg-violet-600 rounded-t-2xl shrink-0">
+          <BarChart3 className="h-4 w-4 text-white" />
+          <span className="text-sm font-bold text-white">Tabla de Probabilidades</span>
+          {!isLoading && (
+            <span className="ml-auto text-[11px] text-violet-200 font-medium">{filtered.length} animales</span>
+          )}
+        </div>
+
+        <div className="overflow-x-auto relative flex-1 min-h-[400px]">
+          {isLoading && (
+            <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center backdrop-blur-[1px]">
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-violet-600" />
+            </div>
+          )}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/70">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-10">#</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Animal</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:table-cell">Número</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Peso</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Barra</th>
+                <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado</th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {currentItems.length === 0 && !isLoading && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-gray-400 text-sm">
+                    {search ? "No se encontraron animales con ese nombre." : "Sin registros. Agrega la primera probabilidad."}
+                  </td>
+                </tr>
+              )}
+              {currentItems.map((row, idx) => {
+                const colors = PROB_COLOR(row.peso);
+                const barPct = maxPeso > 0 ? (row.peso / maxPeso) * 100 : 0;
+                const index = (currentPage - 1) * itemsPerPage + idx + 1;
+                return (
+                  <tr key={row.id} className={`hover:bg-violet-50/30 transition-colors ${!row.activo ? "opacity-50" : ""}`}>
+                    <td className="px-5 py-3.5 text-xs font-mono text-gray-400">{index}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl leading-none">{row.emoji}</span>
+                        <span className="font-semibold text-gray-800 text-sm">{row.animal}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 hidden sm:table-cell">
+                      <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-md">{row.numero}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${colors.badge}`}>
+                        {row.peso}%
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 hidden md:table-cell w-40">
+                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${colors.bar} rounded-full transition-all duration-500`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-center">
+                      <button
+                        onClick={() => handleToggleActivo(row)}
+                        title={row.activo ? "Desactivar" : "Activar"}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                          row.activo
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                            : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                        }`}
+                      >
+                        {row.activo ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                        {row.activo ? "Activo" : "Inactivo"}
+                      </button>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEdit(row)}
+                          className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(row.id)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              Mostrando <span className="font-medium text-gray-700">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-medium text-gray-700">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> de <span className="font-medium text-gray-700">{filtered.length}</span> resultados
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }).map((_, i) => {
+                  // Muestra solo algunas páginas para evitar que se desborde
+                  const page = i + 1;
+                  if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-medium transition-colors ${
+                          currentPage === page
+                            ? "bg-violet-600 text-white"
+                            : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  }
+                  if (page === currentPage - 2 || page === currentPage + 2) {
+                    return <span key={page} className="text-gray-400 text-xs">...</span>;
+                  }
+                  return null;
+                })}
+              </div>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal Crear / Editar ────────────────────────────────── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 z-10">
+            <button onClick={closeModal} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">
+              {editRow ? "Editar Probabilidad" : "Nueva Probabilidad"}
+            </h3>
+            <p className="text-sm text-gray-500 mb-6">
+              {editRow ? "Modifica los datos de la probabilidad." : "Agrega un animal con su peso de probabilidad."}
+            </p>
+
+            <div className="space-y-4">
+              {/* Selector de Animal */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                  Animal *
+                </label>
+                {editRow ? (
+                  /* En edición: muestra el animal fijo con su emoji y número */
+                  <div className="flex items-center gap-3 h-11 px-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-xl leading-none">{form.emoji}</span>
+                    <span className="font-semibold text-gray-700 text-sm">{form.animal}</span>
+                    <span className="ml-auto text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{form.numero}</span>
+                  </div>
+                ) : (
+                  /* En creación: selector con todos los animales del catálogo */
+                  <select
+                    value={form.animal}
+                    onChange={(e) => {
+                      const selected = ANIMALS.find((a) => a.name === e.target.value);
+                      if (selected) {
+                        setForm((f) => ({
+                          ...f,
+                          animal: selected.name,
+                          emoji: selected.emoji,
+                          numero: selected.number,
+                        }));
+                      } else {
+                        setForm((f) => ({ ...f, animal: "", emoji: "🐾", numero: "" }));
+                      }
+                    }}
+                    className="w-full h-11 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white text-gray-800"
+                  >
+                    <option value="">— Selecciona un animal —</option>
+                    {ANIMALS.map((a) => (
+                      <option key={a.name} value={a.name}>
+                        {a.emoji}  {a.name} (#{a.number})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Preview: Emoji + Número (auto-rellenados al seleccionar) */}
+              {form.animal && (
+                <div className="flex items-center gap-3 p-3 bg-violet-50 border border-violet-100 rounded-xl">
+                  <span className="text-3xl leading-none">{form.emoji}</span>
+                  <div>
+                    <p className="text-sm font-bold text-violet-800">{form.animal}</p>
+                    <p className="text-xs text-violet-500">Número: <strong>{form.numero}</strong></p>
+                  </div>
+                </div>
+              )}
+
+
+              {/* Peso */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                  Peso de probabilidad — <span className="text-violet-600 font-bold">{form.peso}</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={form.peso}
+                    onChange={(e) => setForm((f) => ({ ...f, peso: parseInt(e.target.value, 10) }))}
+                    className="flex-1 h-2 accent-violet-600 cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={form.peso}
+                    onChange={(e) => setForm((f) => ({ ...f, peso: Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)) }))}
+                    className="w-16 h-9 text-center text-sm border border-gray-200 rounded-lg font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400 mt-1 px-0.5">
+                  <span>Baja</span><span>Media</span><span>Alta</span>
+                </div>
+              </div>
+
+              {/* Activo */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Estado activo</p>
+                  <p className="text-xs text-gray-400">Los inactivos no aparecen en la proyección del cliente</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, activo: !f.activo }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-400 focus:ring-offset-2 ${
+                    form.activo ? "bg-violet-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.activo ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button onClick={closeModal} className="flex-1 py-3 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1 py-3 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-violet-200"
+              >
+                {isSaving ? (
+                  <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" /></svg>Guardando...</>
+                ) : (
+                  <><Save className="h-4 w-4" />{editRow ? "Guardar cambios" : "Crear probabilidad"}</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm Delete ──────────────────────────────────────── */}
+      {deleteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 z-10 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="h-6 w-6 text-rose-500" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">¿Eliminar probabilidad?</h3>
+            <p className="text-sm text-gray-500 mb-6">Esta acción no se puede deshacer. El animal perderá su peso de probabilidad configurado.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium rounded-xl transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDelete(deleteId)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" /></svg>Eliminando...</>
+                ) : (
+                  <><Trash2 className="h-3.5 w-3.5" />Sí, eliminar</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* ════════════════════════════════════════════════════════════════
    Sección: Control de Pronósticos
@@ -1294,6 +1831,7 @@ const blankSorteoForm = () => ({
 });
 
 const SectionSorteos = () => {
+  const ITEMS_PER_PAGE = 7;
   const [results, setResults] = useState<LotteryResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -1302,6 +1840,7 @@ const SectionSorteos = () => {
   const [form, setForm] = useState(blankSorteoForm());
   const [search, setSearch] = useState("");
   const [scannerInput, setScannerInput] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1416,7 +1955,7 @@ const SectionSorteos = () => {
       duration: 350,
       easing: 'easeOutQuart'
     });
-  }, [results, search]);
+  }, [results, search, currentPage]);
 
   // Date panel
   const availableDates = Array.from(new Set(results.map((r) => r.date))).sort(
@@ -1432,6 +1971,19 @@ const SectionSorteos = () => {
       r.date.includes(search) ||
       String(r.number).includes(search)
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedResults = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const hoursCoveredForDate = new Set(
     results.filter((r) => r.date === panelDate).map((r) => r.hour)
@@ -1673,7 +2225,7 @@ const SectionSorteos = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {filtered.map((r) => (
+              {paginatedResults.map((r) => (
                 <div
                   key={r.id}
                   className="sorteo-item opacity-0 flex items-center gap-4 px-5 py-4 hover:bg-gray-50/70 transition-colors group"
@@ -1718,6 +2270,33 @@ const SectionSorteos = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {filtered.length > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/60">
+              <p className="text-xs text-gray-500">
+                Mostrando {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, filtered.length)} de {filtered.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <span className="text-xs font-semibold text-gray-500 min-w-[58px] text-center">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1973,6 +2552,8 @@ const AdminDashboard = () => {
       case "pronosticos": return <SectionPronosticos />;
       case "sorteos": return <SectionSorteos />;
       case "historial": return <SectionHistorial />;
+      case "carrusel": return <SectionCarruselAdmin />;
+      case "probabilidades": return <SectionProbabilidades />;
       case "configuracion": return <SectionConfiguracion />;
     }
   };
@@ -2122,7 +2703,7 @@ const AdminDashboard = () => {
         }
       `}</style>
 
-      <div className="flex flex-col md:flex-row h-screen bg-gray-50 font-sans overflow-hidden relative">
+      <div className="admin-light-theme flex flex-col md:flex-row h-screen bg-gray-50 font-sans overflow-hidden relative">
         {/* ── Mobile Header ───────────────────────────────────── */}
         <div className="md:hidden flex items-center justify-between bg-[#1a1f37] px-5 py-4 text-white z-40 relative">
           <div>

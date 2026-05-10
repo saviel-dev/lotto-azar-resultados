@@ -4,6 +4,7 @@ import { TrendingUp, Ban, Zap, ChevronLeft, ChevronRight, Cpu, Hand } from 'luci
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatAnimalNumber } from '@/lib/utils';
 import { useProyeccion } from '@/hooks/useProyeccion';
+import { useProbabilidades } from '@/hooks/useProbabilidades';
 
 interface ProbabilityPanelProps {
   results: LotteryResult[];
@@ -19,6 +20,10 @@ function weightColor(weight: number): { bar: string; badge: string; text: string
 }
 
 export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) => {
+  // Carga las probabilidades desde Supabase (con fallback a ANIMAL_WEIGHTS)
+  // El hook sincroniza automáticamente el localStorage que usa useProyeccion
+  const { isLoading: probLoading, error: probError } = useProbabilidades();
+
   const { proyeccion, weightedList, excludedYesterday, lastUpdated, refresh, mode, setMode } = useProyeccion(results, 5, 4 * 60 * 60 * 1000);
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -65,9 +70,17 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
             </div>
             <div>
               <h2 className="text-xl font-bold tracking-tight text-white leading-none">Probabilidades</h2>
-              <p className="text-xs font-medium text-indigo-400 mt-0.5">
-                Probabilidad · Actualiza cada 4 horas
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs font-medium text-indigo-400">
+                  Probabilidad · Actualiza cada 4 horas
+                </p>
+                {!probLoading && !probError && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

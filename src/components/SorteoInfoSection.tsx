@@ -127,7 +127,7 @@ const SorteoInfoSection = () => {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.15 }}
-            className="rounded-2xl p-5 sm:p-6 flex flex-col gap-4 bg-card border shadow-sm"
+            className="rounded-2xl p-5 sm:p-6 flex flex-col gap-4 bg-card border shadow-sm dark:bg-white/10 dark:border-blue-400/25 dark:backdrop-blur-xl dark:shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
             style={{ borderColor: "rgba(59,130,246,0.25)" }}
           >
             <div className="flex items-center gap-2">
@@ -144,7 +144,7 @@ const SorteoInfoSection = () => {
                 { win: "700", mult: "10" },
                 { win: "7.000", mult: "100" },
               ].map((item, idx) => (
-                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-blue-200/50 dark:border-blue-800/30 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm">
+                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-blue-200/50 dark:bg-white/5 dark:hover:bg-white/15 dark:border-blue-300/20 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm dark:backdrop-blur-md">
                   <span className="text-blue-500 text-3xl font-black">{item.win}</span>
                   <span className="text-muted-foreground text-2xl font-black opacity-50">×</span>
                   <span className="text-foreground text-3xl font-black">{item.mult}</span>
@@ -163,7 +163,7 @@ const SorteoInfoSection = () => {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="rounded-2xl p-5 sm:p-6 flex flex-col gap-4 bg-card border shadow-sm"
+            className="rounded-2xl p-5 sm:p-6 flex flex-col gap-4 bg-card border shadow-sm dark:bg-white/10 dark:border-purple-400/25 dark:backdrop-blur-xl dark:shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
             style={{ borderColor: "rgba(168,85,247,0.25)" }}
           >
             <div className="flex items-center gap-2">
@@ -180,7 +180,7 @@ const SorteoInfoSection = () => {
                 { win: "1.400", mult: "10" },
                 { win: "14.000", mult: "100" },
               ].map((item, idx) => (
-                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-purple-200/50 dark:border-purple-800/30 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm">
+                <div key={idx} className="bg-card/60 hover:bg-card transition-colors border-[1px] border-purple-200/50 dark:bg-white/5 dark:hover:bg-white/15 dark:border-purple-300/20 py-4 px-4 rounded-xl flex justify-center items-center gap-3 shadow-sm dark:backdrop-blur-md">
                   <span className="text-purple-500 text-3xl font-black">{item.win}</span>
                   <span className="text-muted-foreground text-2xl font-black opacity-50">×</span>
                   <span className="text-foreground text-3xl font-black">{item.mult}</span>

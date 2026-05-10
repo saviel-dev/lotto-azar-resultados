@@ -7,11 +7,18 @@ import Footer from "@/components/Footer";
 import SorteoInfoSection from "@/components/SorteoInfoSection";
 import { ProbabilityPanel } from "@/components/ProbabilityPanel";
 import { EnjauladosPanel } from "@/components/EnjauladosPanel";
+import { AnimalCarousel } from "@/components/AnimalCarousel";
 import { useSorteos } from "@/hooks/useSorteos";
 import { useEnjaulados } from "@/hooks/useEnjaulados";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
+  const [isDarkTheme, setIsDarkTheme] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme) return storedTheme === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
   const [updatedAgo, setUpdatedAgo] = useState(2);
   const historyRef = useRef<HTMLDivElement>(null);
   const { results, loading, error } = useSorteos();
@@ -24,6 +31,11 @@ const Index = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkTheme);
+    localStorage.setItem("theme", isDarkTheme ? "dark" : "light");
+  }, [isDarkTheme]);
+
   const scrollToHistory = () => {
     historyRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -32,7 +44,11 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Contenedor sticky único para Header y Ticker con separación (hr implícito por los bordes) */}
       <div className="sticky top-0 z-50 w-full flex flex-col shadow-sm">
-        <LottoHeader onToggleFilters={scrollToHistory} />
+        <LottoHeader
+          onToggleFilters={scrollToHistory}
+          isDarkTheme={isDarkTheme}
+          onToggleTheme={() => setIsDarkTheme((prev) => !prev)}
+        />
         <ForecastTicker />
       </div>
       {/* main rest of content */}
@@ -50,6 +66,9 @@ const Index = () => {
             </div>
           </div>
         )}
+
+        {/* Carrusel de animales */}
+        <AnimalCarousel />
 
         <div ref={historyRef} className="container max-w-7xl mx-auto px-4">
           {loading ? (

@@ -18,6 +18,9 @@ import { ANIMALS, ANIMAL_WEIGHTS, type LotteryResult } from "@/data/mockData";
 /* ─── Constantes ─────────────────────────────────────────── */
 export const LS_WEIGHTS_KEY = "lotto_weights";
 export const DEFAULT_REFRESH_MS = 4 * 60 * 60 * 1000; // 4 horas
+const WEIGHT_MIN = 0;
+const WEIGHT_MAX = 100;
+const WEIGHTS_UPDATED_EVENT = "lotto-weights-updated";
 
 /* ─── Tipos públicos ─────────────────────────────────────── */
 export interface AnimalWeight {
@@ -106,7 +109,10 @@ function loadWeightsFromStorage(): Record<string, number> | null {
   try {
     const raw = localStorage.getItem(LS_WEIGHTS_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as Record<string, number>;
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    return Object.fromEntries(
+      Object.entries(parsed).map(([k, v]) => [k, Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, v))])
+    );
   } catch {
     return null;
   }
@@ -132,7 +138,7 @@ export function useProyeccion(
   const activeWeights = useMemo<Record<string, number>>(() => {
     const rawWeights = customWeights ? { ...ANIMAL_WEIGHTS, ...customWeights } : ANIMAL_WEIGHTS;
     return Object.fromEntries(
-      Object.entries(rawWeights).map(([k, v]) => [k, Math.max(10, v)])
+      Object.entries(rawWeights).map(([k, v]) => [k, Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, v))])
     );
   }, [customWeights]);
 
@@ -157,7 +163,7 @@ export function useProyeccion(
   const activePool = useMemo(() => {
     return ANIMALS.filter((a) => a.name !== excludedYesterday && !excludedToday.includes(a.name)).map((a) => ({
       name: a.name,
-      weight: activeWeights[a.name] ?? 10,
+      weight: activeWeights[a.name] ?? WEIGHT_MIN,
     }));
   }, [excludedYesterday, excludedToday, activeWeights]);
 
@@ -166,7 +172,7 @@ export function useProyeccion(
     const activeTotal = activePool.reduce((s, a) => s + a.weight, 0);
 
     return ANIMALS.map((a) => {
-      const rawWeight = activeWeights[a.name] ?? 10;
+      const rawWeight = activeWeights[a.name] ?? WEIGHT_MIN;
       const isExcluded = a.name === excludedYesterday || excludedToday.includes(a.name);
       const effectiveWeight = isExcluded ? 0 : rawWeight;
       const probability =
@@ -193,7 +199,7 @@ export function useProyeccion(
     const selected = weightedSample(activePool, proyeccionCount);
     return selected.map((name) => {
       const animal = ANIMALS.find((a) => a.name === name)!;
-      const weight = activeWeights[name] ?? 10;
+      const weight = activeWeights[name] ?? WEIGHT_MIN;
       const activeTotal = activePool.reduce((s, a) => s + a.weight, 0);
       return {
         name,
@@ -223,12 +229,32 @@ export function useProyeccion(
     setCustomWeights(weights);
     try {
       localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights));
+      window.dispatchEvent(new Event(WEIGHTS_UPDATED_EVENT));
     } catch {
       // silenciar errores de storage
     }
     // Forzar regeneración de proyección con nuevos pesos
     setSeed((s) => s + 1);
     setLastUpdated(new Date());
+  }, []);
+
+  useEffect(() => {
+    const syncWeights = () => {
+      setCustomWeights(loadWeightsFromStorage());
+      setSeed((s) => s + 1);
+      setLastUpdated(new Date());
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === LS_WEIGHTS_KEY) syncWeights();
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(WEIGHTS_UPDATED_EVENT, syncWeights);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(WEIGHTS_UPDATED_EVENT, syncWeights);
+    };
   }, []);
 
   return {
