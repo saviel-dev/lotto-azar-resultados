@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { LotteryResult } from "@/data/mockData";
+import { LotteryResult, ANIMALS } from "@/data/mockData";
 
 interface SorteoRow {
   id: number;
@@ -93,14 +93,19 @@ export function useSorteos(): UseSorteosResult {
       if (silent && newHash === lastHashRef.current) return;
       lastHashRef.current = newHash;
 
-      const mapped: LotteryResult[] = rows.map((row) => ({
-        id: row.id,
-        animal: row.animal,
-        number: row.numero,
-        hour: row.hora,
-        date: row.fecha,
-        emoji: row.emoji,
-      }));
+      // El emoji se resuelve SIEMPRE desde el catálogo local para reflejar
+      // cualquier cambio en mockData.ts sin depender de lo guardado en la BD.
+      const mapped: LotteryResult[] = rows.map((row) => {
+        const catalogEmoji = ANIMALS.find((a) => a.name === row.animal)?.emoji ?? row.emoji;
+        return {
+          id: row.id,
+          animal: row.animal,
+          number: row.numero,
+          hour: row.hora,
+          date: row.fecha,
+          emoji: catalogEmoji,
+        };
+      });
 
       setResults(mapped);
       setLoading(false);

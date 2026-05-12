@@ -274,9 +274,9 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
               <div
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center"
                 style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1.5px solid rgba(255,255,255,0.10)",
-                  boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
+                  background: "#efefefe0",
+                  border: "2px solid rgba(255,255,255,0.6)",
+                  boxShadow: "0 8px 40px rgba(0,0,0,0.35), 0 0 0 6px rgba(255,255,255,0.1)",
                 }}
               >
                 {loading ? (

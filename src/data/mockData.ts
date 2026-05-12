@@ -37,7 +37,7 @@ export const ANIMALS = [
   { name: "Gallina", emoji: "🐔", number: "25" },
   { name: "Vaca", emoji: "🐄", number: "26" },
   { name: "Perro", emoji: "🐶", number: "27" },
-  { name: "Zamuro", emoji: "🦅", number: "28" },
+  { name: "Zamuro", emoji: "🐦‍⬛", number: "28" },
   { name: "Elefante", emoji: "🐘", number: "29" },
   { name: "Caimán", emoji: "🐊", number: "30" },
   { name: "Lapa", emoji: "🦫", number: "31" },
