@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, ChevronDown, X, Eye, EyeOff, LayoutDashboard, Moon, Sun } from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
@@ -20,6 +20,31 @@ const LottoHeader = ({ onToggleFilters, isDarkTheme, onToggleTheme }: LottoHeade
   const [loginError, setLoginError] = useState("");
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [veTime, setVeTime] = useState("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      // Venezuela es UTC-4 fijo
+      const offsetMs = -4 * 60 * 60 * 1000;
+      const veDate = new Date(now.getTime() + offsetMs + now.getTimezoneOffset() * 60 * 1000);
+      
+      let h = veDate.getHours();
+      const m = veDate.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12;
+      h = h ? h : 12; // la hora '0' se muestra como '12'
+      const hStr = h.toString().padStart(2, '0');
+      const mStr = m.toString().padStart(2, '0');
+      
+      setVeTime(`${hStr}:${mStr} ${ampm}`);
+    };
+    
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogoClick = useCallback(() => {
     clickCountRef.current += 1;
@@ -74,7 +99,7 @@ const LottoHeader = ({ onToggleFilters, isDarkTheme, onToggleTheme }: LottoHeade
       >
         {/* ── Fila principal: nav + título + historial ─────────── */}
         <div className="w-full h-[48px] md:h-[56px] flex items-center justify-between">
-          <div className="flex-1">
+          <div className="flex-1 flex items-center gap-2">
             <button
               onClick={onToggleTheme}
               aria-label={isDarkTheme ? "Cambiar a tema claro" : "Cambiar a tema nocturno"}
@@ -84,6 +109,9 @@ const LottoHeader = ({ onToggleFilters, isDarkTheme, onToggleTheme }: LottoHeade
               {isDarkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span className="hidden sm:inline">{isDarkTheme ? "Claro" : "Nocturno"}</span>
             </button>
+            <span className="text-sm font-bold text-muted-foreground px-2 py-1 bg-muted/30 rounded-md font-mono" suppressHydrationWarning>
+              {veTime}
+            </span>
           </div>
           <div className="flex flex-col items-center gap-0">
             <h1

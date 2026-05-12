@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import LottoHeader from "@/components/LottoHeader";
-import ForecastTicker from "@/components/ForecastTicker";
+import NavBar from "@/components/NavBar";
 import HeroSection from "@/components/HeroSection";
 import HistorySection from "@/components/HistorySection";
 import Footer from "@/components/Footer";
@@ -20,6 +20,9 @@ const Index = () => {
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const [updatedAgo, setUpdatedAgo] = useState(2);
+  const heroRef    = useRef<HTMLDivElement>(null);
+  const premiosRef = useRef<HTMLDivElement>(null);
+  const probRef    = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const { results, loading, error } = useSorteos();
   const enjaulados = useEnjaulados(results);
@@ -40,25 +43,38 @@ const Index = () => {
     historyRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleNavScroll = (section: "inicio" | "premios" | "probabilidades" | "historial") => {
+    const map = {
+      inicio:         heroRef,
+      premios:        premiosRef,
+      probabilidades: probRef,
+      historial:      historyRef,
+    } as const;
+    map[section].current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Contenedor sticky único para Header y Ticker con separación (hr implícito por los bordes) */}
-      <div className="sticky top-0 z-50 w-full flex flex-col shadow-sm">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-50 w-full flex flex-col shadow-sm bg-background">
         <LottoHeader
           onToggleFilters={scrollToHistory}
           isDarkTheme={isDarkTheme}
           onToggleTheme={() => setIsDarkTheme((prev) => !prev)}
         />
-        <ForecastTicker />
       </div>
+      {/* NavBar now scrolls with the page */}
+      <NavBar onScrollTo={handleNavScroll} />
       {/* main rest of content */}
       <main className="pt-4">
-        <HeroSection updatedAgo={updatedAgo} />
+        <div ref={heroRef}>
+          <HeroSection updatedAgo={updatedAgo} />
+        </div>
 
         {/* Panel de Enjaulados y Probabilidades */}
         {!loading && !error && (
-          <div className="container max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-4">
+          <div ref={probRef} className="container max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div ref={premiosRef} className="lg:col-span-4">
               <ProbabilityPanel results={results} />
             </div>
             <div className="lg:col-span-8">

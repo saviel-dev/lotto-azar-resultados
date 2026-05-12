@@ -66,7 +66,7 @@ function secondsToNext(activeIdx: number): number {
 }
 
 /* ─── Partículas flotantes ─────────────────────────────────────── */
-const LOTTERY_ICONS = ["🎰","🎲","💰","⭐","🌟","💫","🍀","🎯","🏆","💎","🃏","🎴","✨","🪙","🎊"];
+const LOTTERY_ICONS = ["🎰", "🎲", "💰", "⭐", "🌟", "💫", "🍀", "🎯", "🏆", "💎", "🃏", "🎴", "✨", "🪙", "🎊"];
 function seeded(n: number) { const x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); }
 const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
   id: i,
@@ -155,11 +155,11 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
 
   // Variantes de animación framer-motion
   const variants = {
-    enterForward:  { opacity: 0, x: 60,  scale: 0.88 },
+    enterForward: { opacity: 0, x: 60, scale: 0.88 },
     enterBackward: { opacity: 0, x: -60, scale: 0.88 },
-    center:        { opacity: 1, x: 0,   scale: 1    },
-    exitForward:   { opacity: 0, x: -60, scale: 0.88 },
-    exitBackward:  { opacity: 0, x: 60,  scale: 0.88 },
+    center: { opacity: 1, x: 0, scale: 1 },
+    exitForward: { opacity: 0, x: -60, scale: 0.88 },
+    exitBackward: { opacity: 0, x: 60, scale: 0.88 },
   };
 
   return (
