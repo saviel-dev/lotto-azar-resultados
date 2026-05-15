@@ -3,8 +3,6 @@ import { formatAnimalNumber } from "@/lib/utils";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { animate, stagger } from "animejs";
 import { sileo } from "sileo";
-import { driver } from "driver.js";
-import "driver.js/dist/driver.css";
 
 // Backwards compatibility layer for AnimeJS v3 usage pattern
 const anime = Object.assign((options: any) => {
@@ -42,6 +40,8 @@ import {
   ToggleLeft,
   ToggleRight,
   Search,
+  Sun,
+  Moon,
 } from "lucide-react";
 import {
   ANIMALS,
@@ -55,6 +55,7 @@ import { Input } from "@/components/ui/input";
 import { LS_WEIGHTS_KEY, type SorteoMode } from "@/hooks/useProyeccion";
 import { SectionCarrusel as SectionCarruselAdmin } from "@/components/SectionCarrusel";
 import { useProbabilidades, type ProbabilidadRow, PROB_UPDATED_EVENT } from "@/hooks/useProbabilidades";
+import { useTheme } from "@/hooks/useTheme";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 const ALL_ANIMALS = ANIMALS.map((a) => a.name);
@@ -351,6 +352,102 @@ const DEFAULT_CONFIG: BetConfig = {
   monto_maximo: 10000,
   multiplicador_normal: 70,
   multiplicador_comodin: 140,
+};
+
+/* ════════════════════════════════════════════════════════════════
+   Tarjeta: Tema del sitio público (claro / nocturno)
+════════════════════════════════════════════════════════════════ */
+const ThemeToggleCard = () => {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3.5 bg-slate-700 rounded-t-2xl">
+        <span className="text-sm font-bold text-white">🎨 Tema del sitio público</span>
+        <span className="ml-auto text-[11px] text-slate-300 font-medium">Claro · Nocturno</span>
+      </div>
+      <div className="p-5">
+        <p className="text-xs text-gray-500 mb-4">
+          Selecciona el tema visual que verán los visitantes del sitio. El cambio se aplica de inmediato y se guarda en el navegador.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Claro */}
+          <button
+            id="theme-card-light"
+            onClick={() => setTheme("light")}
+            className={`relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 ${
+              theme === "light"
+                ? "border-blue-500 bg-blue-50 shadow-md shadow-blue-100"
+                : "border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40"
+            }`}
+          >
+            {/* Preview */}
+            <div className="w-full h-16 rounded-lg bg-white border border-gray-200 overflow-hidden flex flex-col shadow-sm">
+              <div className="h-4 bg-gray-100 flex items-center px-2 gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                <div className="w-8 h-1 rounded-full bg-gray-200" />
+              </div>
+              <div className="flex-1 p-1.5 flex gap-1">
+                <div className="w-6 h-full rounded bg-blue-100" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="h-1.5 rounded-full bg-gray-100 w-3/4" />
+                  <div className="h-1.5 rounded-full bg-gray-100 w-1/2" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Sun className="h-5 w-5 text-amber-500" />
+              <span className="text-sm font-semibold text-gray-700">Claro</span>
+            </div>
+            {theme === "light" && (
+              <span className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            )}
+          </button>
+
+          {/* Nocturno */}
+          <button
+            id="theme-card-dark"
+            onClick={() => setTheme("dark")}
+            className={`relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 ${
+              theme === "dark"
+                ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
+                : "border-gray-200 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/40"
+            }`}
+          >
+            {/* Preview */}
+            <div className="w-full h-16 rounded-lg bg-gray-900 border border-gray-700 overflow-hidden flex flex-col shadow-sm">
+              <div className="h-4 bg-gray-800 flex items-center px-2 gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+                <div className="w-8 h-1 rounded-full bg-gray-700" />
+              </div>
+              <div className="flex-1 p-1.5 flex gap-1">
+                <div className="w-6 h-full rounded bg-indigo-900/60" />
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="h-1.5 rounded-full bg-gray-700 w-3/4" />
+                  <div className="h-1.5 rounded-full bg-gray-700 w-1/2" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Moon className="h-5 w-5 text-indigo-400" />
+              <span className="text-sm font-semibold text-gray-700">Nocturno</span>
+            </div>
+            {theme === "dark" && (
+              <span className="absolute top-2 right-2 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const SectionConfiguracion = () => {
@@ -680,197 +777,10 @@ const SectionConfiguracion = () => {
             </button>
           </div>
 
-          {/* ── Configuración de Probabilidades de Sorteo ────── */}
-          <SorteoConfigPanel />
+          {/* ── Tema del sitio público ────── */}
+          <ThemeToggleCard />
         </div>
       )}
-    </div>
-  );
-};
-
-/* ══════════════════════════════════════════════════════════════════
-   Sub-panel: Configuración de Probabilidades & Modo Sorteo
-══════════════════════════════════════════════════════════════════ */
-
-// Top-10 animales por peso por defecto para edición rápida
-const TOP_EDITABLE_ANIMALS = Object.entries(ANIMAL_WEIGHTS)
-  .sort((a, b) => b[1] - a[1])
-  .slice(0, 10)
-  .map(([name]) => name);
-
-const LS_MODE_KEY = "lotto_sorteo_mode";
-
-const SorteoConfigPanel = () => {
-  const [mode, setModeState] = useState<SorteoMode>(() => {
-    return (localStorage.getItem(LS_MODE_KEY) as SorteoMode) ?? "auto";
-  });
-
-  const [weights, setWeights] = useState<Record<string, number>>(() => {
-    try {
-      const raw = localStorage.getItem(LS_WEIGHTS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, number>;
-        return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Math.max(0, Math.min(100, v))]));
-      }
-    } catch {}
-    return Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(0, Math.min(100, v))]));
-  });
-  const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({});
-
-  const [saved, setSaved] = useState(false);
-
-  const handleModeChange = (newMode: SorteoMode) => {
-    setModeState(newMode);
-    localStorage.setItem(LS_MODE_KEY, newMode);
-  };
-
-  const handleWeightChange = (name: string, value: number) => {
-    setWeights(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSaveWeights = () => {
-    localStorage.setItem(LS_WEIGHTS_KEY, JSON.stringify(weights));
-    window.dispatchEvent(new Event("lotto-weights-updated"));
-    setWeightDrafts({});
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    sileo.success({ title: "Probabilidades guardadas", description: "Los % de salida se actualizarán en el próximo sorteo.", duration: 2000 });
-  };
-
-  const handleResetWeights = () => {
-    setWeights(Object.fromEntries(Object.entries(ANIMAL_WEIGHTS).map(([k, v]) => [k, Math.max(0, Math.min(100, v))])));
-    setWeightDrafts({});
-    localStorage.removeItem(LS_WEIGHTS_KEY);
-    window.dispatchEvent(new Event("lotto-weights-updated"));
-    sileo.success({ title: "Probabilidades restauradas", description: "Se han restablecido los valores por defecto.", duration: 2000 });
-  };
-
-  const animalData = (name: string) => ANIMALS.find(a => a.name === name) ?? { emoji: "🐾", name, number: "?" };
-  const maxW = Math.max(...TOP_EDITABLE_ANIMALS.map(n => weights[n] ?? ANIMAL_WEIGHTS[n] ?? 10));
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-3.5 bg-violet-600 rounded-t-2xl">
-        <Sliders className="h-4 w-4 text-white" />
-        <span className="text-sm font-bold text-white">⚙️ Probabilidades de Sorteo</span>
-        <span className="ml-auto text-[11px] text-violet-200 font-medium">Probabilidad por animal</span>
-      </div>
-
-      <div className="p-5 space-y-6">
-        {/* Modo de sorteo */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Modo del Sorteo</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleModeChange("auto")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                mode === "auto"
-                  ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-200"
-                  : "bg-white border-gray-200 text-gray-500 hover:border-emerald-400"
-              }`}
-            >
-              <Cpu className="h-4 w-4" />
-              Automático
-            </button>
-            <button
-              onClick={() => handleModeChange("manual")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                mode === "manual"
-                  ? "bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200"
-                  : "bg-white border-gray-200 text-gray-500 hover:border-amber-400"
-              }`}
-            >
-              <Hand className="h-4 w-4" />
-              Manual
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-400 mt-2">
-            {mode === "auto"
-              ? "✅ La proyección actualiza automáticamente cada 4 horas."
-              : "✋ La proyección solo cambia al presionar 'Iniciar sorteo' en el panel público."}
-          </p>
-        </div>
-
-        {/* Sliders de Probabilidad – top 10 */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Probabilidad — Top 10</p>
-          <p className="text-[11px] text-gray-400 mb-4">Valores más altos = más probable en la proyección. Escala libre, el sistema normaliza automáticamente.</p>
-          <div className="space-y-4">
-            {TOP_EDITABLE_ANIMALS.map(name => {
-              const a = animalData(name);
-              const w = Math.max(0, Math.min(100, weights[name] ?? ANIMAL_WEIGHTS[name] ?? 0));
-              return (
-                <div key={name} className="flex items-center gap-3">
-                  <span className="text-xl w-7 text-center leading-none shrink-0">{a.emoji}</span>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-semibold text-gray-700 truncate max-w-[120px]">{name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-violet-500 font-bold">Probabilidad:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={weightDrafts[name] ?? String(w)}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setWeightDrafts((prev) => ({ ...prev, [name]: raw }));
-                            if (raw === "") return;
-                            const parsed = parseInt(raw, 10);
-                            if (Number.isNaN(parsed)) return;
-                            handleWeightChange(name, Math.max(0, Math.min(100, parsed)));
-                          }}
-                          onBlur={() => {
-                            const raw = weightDrafts[name];
-                            if (raw === "") {
-                              setWeightDrafts((prev) => ({ ...prev, [name]: String(w) }));
-                            }
-                          }}
-                          className="w-14 h-6 text-xs text-center border border-gray-200 rounded-md font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-violet-400"
-                        />
-                      </div>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={w}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value, 10);
-                        handleWeightChange(name, value);
-                        setWeightDrafts((prev) => ({ ...prev, [name]: String(value) }));
-                      }}
-                      className="w-full h-1.5 rounded-full accent-violet-600 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Botones */}
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={handleResetWeights}
-            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-medium rounded-xl transition-colors"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Restaurar
-          </button>
-          <button
-            onClick={handleSaveWeights}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-md ${
-              saved
-                ? "bg-emerald-600 text-white shadow-emerald-200"
-                : "bg-violet-600 hover:bg-violet-700 text-white shadow-violet-200"
-            }`}
-          >
-            <Save className="h-4 w-4" />
-            {saved ? "¡Guardado!" : "Guardar probabilidades"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -2459,7 +2369,7 @@ const SectionHistorial = () => {
   const bgColors = ["bg-[#22675e]", "bg-[#297b70]", "bg-[#2f8f82]", "bg-[#35a394]", "bg-[#3bb7a6]"];
 
   return (
-    <div ref={containerRef} className="flex-1 w-full max-w-full overflow-hidden">
+    <div ref={containerRef} className="w-full max-w-full">
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-900">Historial de Sorteos</h2>
         <p className="text-sm text-gray-500">Consulta el registro completo de todos los sorteos en vista de cuadrícula</p>
@@ -2558,151 +2468,8 @@ const AdminDashboard = () => {
     }
   };
 
-  const startTour = useCallback(() => {
-    const driverObj = driver({
-      showProgress: true,
-      animate: true,
-      smoothScroll: true,
-      allowClose: true,
-      overlayOpacity: 0.5,
-      popoverClass: "admin-tour-popover",
-      nextBtnText: "Siguiente →",
-      prevBtnText: "← Anterior",
-      doneBtnText: "¡Entendido!",
-      progressText: "{{current}} de {{total}}",
-      steps: [
-        {
-          element: "#tour-dashboard",
-          popover: {
-            title: "🏠 Dashboard",
-            description: "Vista general del panel: estadísticas clave, últimos resultados y actividad reciente del sistema.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#tour-pronosticos",
-          popover: {
-            title: "📡 Control de Pronósticos",
-            description: "Administra los pronósticos por hora. Agrega, edita o elimina las predicciones de cada franja horaria.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#tour-sorteos",
-          popover: {
-            title: "🏆 Sorteos",
-            description: "Registra y gestiona los resultados de cada sorteo. Puedes agregar nuevos resultados o editar los existentes.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#tour-historial",
-          popover: {
-            title: "📋 Historial",
-            description: "Consulta el registro completo de todos los sorteos en formato de cuadrícula por fecha y hora.",
-            side: "right",
-            align: "start",
-          },
-        },
-        {
-          element: "#tour-configuracion",
-          popover: {
-            title: "⚙️ Configuración",
-            description: "Ajusta los montos mínimos y máximos de apuesta permitidos. Los cambios se reflejan en tiempo real en el sitio público.",
-            side: "right",
-            align: "start",
-          },
-        },
-      ],
-    });
-    driverObj.drive();
-  }, []);
-
   return (
     <>
-      {/* Estilos personalizados del tour */}
-      <style>{`
-        .admin-tour-popover {
-          background: #ffffff !important;
-          border-radius: 14px !important;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.18) !important;
-          border: 1px solid #e2e8f0 !important;
-          font-family: inherit !important;
-          padding: 0 !important;
-          overflow: hidden !important;
-        }
-        .admin-tour-popover .driver-popover-title {
-          font-size: 15px !important;
-          font-weight: 700 !important;
-          color: #0f172a !important;
-          padding: 18px 20px 0 20px !important;
-          margin: 0 !important;
-        }
-        .admin-tour-popover .driver-popover-description {
-          font-size: 13px !important;
-          color: #475569 !important;
-          line-height: 1.6 !important;
-          padding: 8px 20px 0 20px !important;
-          margin: 0 !important;
-        }
-        .admin-tour-popover .driver-popover-progress-text {
-          font-size: 11px !important;
-          color: #94a3b8 !important;
-          font-weight: 500 !important;
-        }
-        .admin-tour-popover .driver-popover-footer {
-          padding: 14px 20px !important;
-          background: #f8fafc !important;
-          border-top: 1px solid #f1f5f9 !important;
-          margin-top: 14px !important;
-          display: flex !important;
-          justify-content: space-between !important;
-          align-items: center !important;
-          gap: 8px !important;
-        }
-        .admin-tour-popover .driver-popover-prev-btn,
-        .admin-tour-popover .driver-popover-next-btn,
-        .admin-tour-popover .driver-popover-close-btn {
-          border-radius: 8px !important;
-          font-size: 12px !important;
-          font-weight: 600 !important;
-          padding: 7px 14px !important;
-          transition: all 0.2s !important;
-          border: none !important;
-          cursor: pointer !important;
-        }
-        .admin-tour-popover .driver-popover-next-btn {
-          background: #2563eb !important;
-          color: #ffffff !important;
-          box-shadow: 0 2px 8px rgba(37,99,235,0.35) !important;
-        }
-        .admin-tour-popover .driver-popover-next-btn:hover {
-          background: #1d4ed8 !important;
-        }
-        .admin-tour-popover .driver-popover-prev-btn {
-          background: #ffffff !important;
-          color: #475569 !important;
-          border: 1px solid #e2e8f0 !important;
-        }
-        .admin-tour-popover .driver-popover-prev-btn:hover {
-          background: #f1f5f9 !important;
-        }
-        .admin-tour-popover .driver-popover-close-btn {
-          background: transparent !important;
-          color: #94a3b8 !important;
-          padding: 4px 8px !important;
-        }
-        .admin-tour-popover .driver-popover-close-btn:hover {
-          color: #475569 !important;
-        }
-        .driver-overlay {
-          background: rgba(0,0,0,0.5) !important;
-        }
-      `}</style>
-
       <div className="admin-light-theme flex flex-col md:flex-row h-screen bg-gray-50 font-sans overflow-hidden relative">
         {/* ── Mobile Header ───────────────────────────────────── */}
         <div className="md:hidden flex items-center justify-between bg-[#1a1f37] px-5 py-4 text-white z-40 relative">
@@ -2712,13 +2479,6 @@ const AdminDashboard = () => {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={startTour}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-            >
-              <Map className="h-4 w-4" />
-              <span>Tour</span>
-            </button>
             <button 
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white"
@@ -2737,14 +2497,14 @@ const AdminDashboard = () => {
                   <button
                     key={id}
                     onClick={() => { setActiveSection(id); setIsMobileMenuOpen(false); }}
-                    className={`flex items-center w-full px-5 py-3.5 text-base transition-colors ${
+                    className={`flex items-center w-full px-5 py-3.5 text-base text-left transition-colors ${
                       activeSection === id
                         ? "bg-blue-600/20 text-blue-400 font-semibold border-l-4 border-blue-500"
                         : "text-white/70 hover:bg-white/5 hover:text-white border-l-4 border-transparent"
                     }`}
                   >
                     <Icon className={`h-5 w-5 flex-shrink-0 mr-3 ${activeSection === id ? "text-blue-400" : "text-white/50"}`} />
-                    {label}
+                    <span className="flex-1 leading-tight">{label}</span>
                   </button>
                 ))}
              </nav>
@@ -2773,54 +2533,37 @@ const AdminDashboard = () => {
         )}
 
         {/* ── Desktop Sidebar ───────────────────────────────────────────── */}
-        <aside className="hidden md:flex w-64 flex-shrink-0 flex-col bg-[#1a1f37] text-white z-30 shadow-xl overflow-hidden">
-          {/* Logo + Tour button */}
-          <div className="px-6 py-6 border-b border-white/10 relative">
-            <div className="flex items-start justify-between gap-3 relative z-10">
-              <div>
-                <span className="text-2xl font-bold tracking-tight text-white flex items-center gap-1.5">
-                  Lotto <span className="text-blue-400">Azar</span>
-                </span>
-                <p className="text-[11px] text-white/50 mt-1 uppercase tracking-widest font-semibold">
-                  Panel de Control
-                </p>
-              </div>
-              {/* Tour button */}
-              <button
-                id="tour-btn"
-                onClick={startTour}
-                title="Tour del panel"
-                className="flex-shrink-0 mt-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-md"
-              >
-                <Map className="h-4 w-4" />
-                <span>Tour</span>
-              </button>
-            </div>
-            {/* Soft glow effect for logo area */}
-            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/10 to-transparent pointer-events-none" />
+        <aside className="hidden md:flex w-56 flex-shrink-0 flex-col bg-[#1a1f37] text-white z-30 border-r border-white/5 overflow-hidden">
+          {/* Logo */}
+          <div className="px-5 py-5 border-b border-white/5">
+            <span className="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
+              Lotto <span className="text-blue-400">Azar</span>
+            </span>
+            <p className="text-[10px] text-white/40 mt-1 uppercase tracking-widest font-semibold">
+              Panel de Control
+            </p>
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 py-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-            <p className="px-6 text-[11px] text-white/40 uppercase tracking-widest mb-3 font-semibold">
+          <nav className="flex-1 py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <p className="px-5 text-[10px] text-white/30 uppercase tracking-widest mb-3 font-semibold">
               Módulos
             </p>
-            <div className="space-y-1.5 px-4">
+            <div className="space-y-1 px-3">
               {navItems.map(({ id, icon: Icon, label }) => (
                 <button
                   key={id}
-                  id={`tour-${id}`}
                   onClick={() => setActiveSection(id)}
-                  className={`flex items-center gap-3.5 w-full px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 text-sm text-left rounded-lg transition-colors ${
                     activeSection === id
-                      ? "bg-blue-600 text-white font-medium shadow-md shadow-blue-900/40"
-                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                      ? "bg-blue-600/20 text-blue-400 font-medium"
+                      : "text-white/60 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 flex-shrink-0 ${activeSection === id ? "text-white" : "text-white/50"}`} />
-                  {label}
+                  <Icon className={`h-4 w-4 flex-shrink-0 ${activeSection === id ? "text-blue-400" : "text-white/40"}`} />
+                  <span className="flex-1 leading-tight">{label}</span>
                   {activeSection === id && (
-                    <ChevronRight className="h-3.5 w-3.5 ml-auto opacity-70" />
+                    <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 ml-auto opacity-50" />
                   )}
                 </button>
               ))}
@@ -2828,14 +2571,14 @@ const AdminDashboard = () => {
           </nav>
 
           {/* User + logout */}
-          <div className="p-5 border-t border-white/10 bg-[#121629]">
-            <div className="flex items-center gap-3 mb-4 px-1">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-sm font-bold shadow-md">
+          <div className="p-4 border-t border-white/5 bg-[#1a1f37]">
+            <div className="flex items-center gap-3 mb-3 px-1">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
                 A
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">Admin</p>
-                <p className="text-[11px] text-white/40 truncate">whpj6436@gmail.com</p>
+                <p className="text-[10px] text-white/40 truncate">whpj6436@gmail.com</p>
               </div>
             </div>
             <button
@@ -2843,7 +2586,7 @@ const AdminDashboard = () => {
                 sessionStorage.removeItem("adminAuth");
                 navigate("/");
               }}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-xs font-medium text-white/70 hover:text-rose-400 bg-white/5 hover:bg-rose-500/10 rounded-xl transition-colors"
+              className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-medium text-white/50 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
             >
               <LogOut className="h-3.5 w-3.5" />
               Cerrar sesión

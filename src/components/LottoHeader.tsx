@@ -1,16 +1,14 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, ChevronDown, X, Eye, EyeOff, LayoutDashboard, Moon, Sun } from "lucide-react";
+import { Calendar, ChevronDown, X, Eye, EyeOff, LayoutDashboard } from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
 interface LottoHeaderProps {
   onToggleFilters: () => void;
-  isDarkTheme: boolean;
-  onToggleTheme: () => void;
 }
 
-const LottoHeader = ({ onToggleFilters, isDarkTheme, onToggleTheme }: LottoHeaderProps) => {
+const LottoHeader = ({ onToggleFilters }: LottoHeaderProps) => {
   const navigate = useNavigate();
   const [showLogin, setShowLogin] = useState(false);
   const [email, setEmail] = useState("");
@@ -100,15 +98,6 @@ const LottoHeader = ({ onToggleFilters, isDarkTheme, onToggleTheme }: LottoHeade
         {/* ── Fila principal: nav + título + historial ─────────── */}
         <div className="w-full h-[48px] md:h-[56px] flex items-center justify-between">
           <div className="flex-1 flex items-center gap-2">
-            <button
-              onClick={onToggleTheme}
-              aria-label={isDarkTheme ? "Cambiar a tema claro" : "Cambiar a tema nocturno"}
-              title={isDarkTheme ? "Tema claro" : "Tema nocturno"}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors px-3 py-2 rounded-lg hover:bg-muted"
-            >
-              {isDarkTheme ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span className="hidden sm:inline">{isDarkTheme ? "Claro" : "Nocturno"}</span>
-            </button>
             <span className="text-sm font-bold text-muted-foreground px-2 py-1 bg-muted/30 rounded-md font-mono" suppressHydrationWarning>
               {veTime}
             </span>

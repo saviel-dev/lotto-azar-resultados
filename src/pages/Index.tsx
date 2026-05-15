@@ -10,15 +10,11 @@ import { EnjauladosPanel } from "@/components/EnjauladosPanel";
 import { AnimalCarousel } from "@/components/AnimalCarousel";
 import { useSorteos } from "@/hooks/useSorteos";
 import { useEnjaulados } from "@/hooks/useEnjaulados";
+import { useTheme } from "@/hooks/useTheme";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
-  const [isDarkTheme, setIsDarkTheme] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const storedTheme = localStorage.getItem("theme");
-    if (storedTheme) return storedTheme === "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
+  useTheme(); // ensures ThemeProvider effect runs on this route
   const [updatedAgo, setUpdatedAgo] = useState(2);
   const heroRef    = useRef<HTMLDivElement>(null);
   const premiosRef = useRef<HTMLDivElement>(null);
@@ -27,17 +23,13 @@ const Index = () => {
   const { results, loading, error } = useSorteos();
   const enjaulados = useEnjaulados(results);
 
+  // tick "updated X mins ago"
   useEffect(() => {
     const interval = setInterval(() => {
       setUpdatedAgo((prev) => (prev >= 5 ? 0 : prev + 1));
     }, 60000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", isDarkTheme);
-    localStorage.setItem("theme", isDarkTheme ? "dark" : "light");
-  }, [isDarkTheme]);
 
   const scrollToHistory = () => {
     historyRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,8 +51,6 @@ const Index = () => {
       <div className="sticky top-0 z-50 w-full flex flex-col shadow-sm bg-background">
         <LottoHeader
           onToggleFilters={scrollToHistory}
-          isDarkTheme={isDarkTheme}
-          onToggleTheme={() => setIsDarkTheme((prev) => !prev)}
         />
       </div>
       {/* NavBar now scrolls with the page */}
