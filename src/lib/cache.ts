@@ -69,6 +69,26 @@ export function clearCache(key?: string): void {
   }
 }
 
+/**
+ * Retorna datos cacheados aunque estén expirados, junto con un flag `isStale`.
+ * Útil para el patrón stale-while-revalidate: mostrar datos viejos inmediatamente
+ * mientras se refresca en segundo plano.
+ */
+export function getCachedStale<T>(key: string, maxAgeMs: number): {
+  data: T | null;
+  isStale: boolean;
+} {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    if (!raw) return { data: null, isStale: false };
+    const entry: CacheEntry<T> = JSON.parse(raw);
+    const age = Date.now() - entry.timestamp;
+    return { data: entry.data, isStale: age > maxAgeMs };
+  } catch {
+    return { data: null, isStale: false };
+  }
+}
+
 // ── Claves de caché compartidas ────────────────────────────────
 export const CACHE_KEYS = {
   SORTEOS: "sorteos",

@@ -76,8 +76,24 @@ function hashIds(rows: LotteryResult[]): string {
   return rows.map((r) => r.id).sort((a, b) => a - b).join(",");
 }
 
-// Polling de respaldo: cada 5 minutos (antes era cada 30 segundos)
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
+/**
+ * Polling Inteligente — calcula el intervalo óptimo en ms:
+ *
+ * - Minutos :58 y :59 de cada hora → "Modo Cacería" cada 10s
+ *   (el admin publica entre 12:55 y 12:58 → la app baja el dato
+ *   y lo mantiene OCULTO hasta que el reloj marque la hora exacta)
+ *
+ * - Minuto :00 de cada hora → cada 20s (ventana de gracia por si
+ *   el admin publicó justo en el minuto :00)
+ *
+ * - Resto del tiempo → cada 5 minutos (modo ahorro)
+ */
+function getPollingInterval(): number {
+  const { m } = nowInVenezuela();
+  if (m === 58 || m === 59) return 10_000;   // Modo Cacería: cada 10s
+  if (m === 0)               return 20_000;   // Ventana de gracia: cada 20s
+  return 5 * 60 * 1000;                       // Modo Ahorro: cada 5 min
+}
 
 export function useSorteos(): UseSorteosResult {
   // Inicializar desde caché inmediatamente (0ms de espera visible)
@@ -87,6 +103,7 @@ export function useSorteos(): UseSorteosResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const lastHashRef = useRef<string>("");
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reloj reactivo para revelar el sorteo puntualmente al iniciar su hora
   const [currentH, setCurrentH] = useState(() => nowInVenezuela().h);
@@ -107,22 +124,16 @@ export function useSorteos(): UseSorteosResult {
       setError(null);
 
       // ── Fetch delta: solo pedir datos desde la última fecha cacheada ──
-      // Los sorteos históricos son inmutables → no hace falta re-descargarlos.
-      // Solo traemos desde la fecha más reciente que ya tenemos, o solo hoy si no hay caché.
       const cached = getCachedForever<LotteryResult[]>(CACHE_KEYS.SORTEOS) ?? [];
       const today = getTodayStrVE();
 
-      // La fecha "desde" es el max entre: 7 días atrás (para tener historial mínimo visible)
-      // o la fecha más reciente cacheada (para no re-descargar lo que ya tenemos).
-      // Si no hay caché: bajar 90 días para la primera carga.
+      // Primera visita: bajar 30 días. Visitas siguientes: solo desde ayer.
       let fromDate: string;
       if (cached.length === 0) {
-        // Primera visita: bajar 90 días de historial
         const d = new Date();
-        d.setDate(d.getDate() - 90);
+        d.setDate(d.getDate() - 30);
         fromDate = d.toISOString().split("T")[0];
       } else {
-        // Visitas siguientes: solo pedir desde ayer (para cubrir cambios del día anterior y hoy)
         const d = new Date();
         d.setDate(d.getDate() - 1);
         fromDate = d.toISOString().split("T")[0];
@@ -131,7 +142,7 @@ export function useSorteos(): UseSorteosResult {
       const { data, error: sbError } = await supabase
         .from("sorteos")
         .select("id, animal, numero, hora, fecha, emoji")
-        .gte("fecha", fromDate)          // ← Fetch delta: solo desde la última fecha
+        .gte("fecha", fromDate)
         .order("fecha", { ascending: false })
         .order("hora", { ascending: true })
         .limit(200);
@@ -141,52 +152,56 @@ export function useSorteos(): UseSorteosResult {
       if (sbError) {
         console.error("[useSorteos] Error al obtener sorteos:", sbError.message);
         setError(sbError.message);
-        // Si hay caché, seguir mostrándola aunque falle Supabase
-        if (cached.length > 0 && !silent) setLoading(false);
-        else setLoading(false);
+        setLoading(false);
         return;
       }
 
       const incoming = (data as SorteoRow[]).map(rowToResult);
-
-      // Fusionar con caché existente
       const merged = mergeResults(cached, incoming);
 
+      // Truncar caché a los últimos 30 días para no saturar localStorage
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      const cutoffStr = cutoff.toISOString().split("T")[0];
+      const trimmed = merged.filter((r) => r.date >= cutoffStr);
+
       // Solo actualizar el estado si hubo cambios reales
-      const newHash = hashIds(merged);
-      if (silent && newHash === lastHashRef.current) return;
+      const newHash = hashIds(trimmed);
+      if (silent && newHash === lastHashRef.current) {
+        scheduleNextPoll(silent);
+        return;
+      }
       lastHashRef.current = newHash;
 
-      // Guardar en caché para las próximas visitas
-      setCached(CACHE_KEYS.SORTEOS, merged);
+      // Guardar en caché (datos recortados a 30 días)
+      setCached(CACHE_KEYS.SORTEOS, trimmed);
 
-      setResults(merged);
+      setResults(trimmed);
       setLoading(false);
+
+      // Programar el próximo poll con intervalo dinámico
+      scheduleNextPoll(true);
     }
 
-    fetchSorteos();
+    /**
+     * Programa el próximo fetch con el intervalo inteligente.
+     * Usamos setTimeout recursivo en lugar de setInterval para que
+     * el intervalo se recalcule dinámicamente en cada ciclo.
+     */
+    function scheduleNextPoll(silent: boolean) {
+      if (cancelled) return;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      const delay = getPollingInterval();
+      pollTimerRef.current = setTimeout(() => {
+        if (!cancelled) fetchSorteos(silent);
+      }, delay);
+    }
 
-    // Suscripción en tiempo real vía WebSocket de Supabase
-    const channel = supabase
-      .channel("sorteos-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sorteos" },
-        () => {
-          if (!cancelled) fetchSorteos(true);
-        }
-      )
-      .subscribe();
-
-    // Polling de respaldo cada 5 min (antes 30s) — solo busca delta
-    const pollInterval = setInterval(() => {
-      if (!cancelled) fetchSorteos(true);
-    }, POLL_INTERVAL_MS);
+    fetchSorteos(false);
 
     return () => {
       cancelled = true;
-      clearInterval(pollInterval);
-      supabase.removeChannel(channel);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, []);
 

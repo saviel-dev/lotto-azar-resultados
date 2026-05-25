@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { ANIMAL_WEIGHTS } from "@/data/mockData";
 import { LS_WEIGHTS_KEY } from "@/hooks/useProyeccion";
-import { getCached, setCached, clearCache, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
+import { getCachedStale, setCached, clearCache, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
 
 export interface ProbabilidadRow {
   id: number;
@@ -43,17 +43,24 @@ function rowsToWeights(rows: ProbabilidadRow[]): Record<string, number> {
 }
 
 export function useProbabilidades(): UseProbabilidadesResult {
-  // Inicializar desde caché inmediatamente
-  const [rows, setRows] = useState<ProbabilidadRow[]>(() => {
-    return getCached<ProbabilidadRow[]>(CACHE_KEYS.PROBABILIDADES, CACHE_TTL.PROBABILIDADES_MS) ?? [];
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  // Stale-while-revalidate: inicializar desde caché (aunque esté expirada)
+  const { data: staleData, isStale } = getCachedStale<ProbabilidadRow[]>(
+    CACHE_KEYS.PROBABILIDADES,
+    CACHE_TTL.PROBABILIDADES_MS
+  );
+
+  const [rows, setRows] = useState<ProbabilidadRow[]>(staleData ?? []);
+  // Si hay datos (aunque viejos), no mostramos spinner inicial
+  const [isLoading, setIsLoading] = useState(staleData === null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRows = useCallback(async () => {
-    // Si hay caché válida (< 24h), usarla directamente sin llamar a Supabase
-    const cached = getCached<ProbabilidadRow[]>(CACHE_KEYS.PROBABILIDADES, CACHE_TTL.PROBABILIDADES_MS);
-    if (cached && cached.length > 0) {
+  const fetchRows = useCallback(async (silent = false) => {
+    // Si hay caché fresca, usarla directamente sin llamar a Supabase
+    const { data: cached, isStale: expired } = getCachedStale<ProbabilidadRow[]>(
+      CACHE_KEYS.PROBABILIDADES,
+      CACHE_TTL.PROBABILIDADES_MS
+    );
+    if (cached && cached.length > 0 && !expired) {
       setRows(cached);
       setIsLoading(false);
       // Sincronizar weights con localStorage para useProyeccion
@@ -67,7 +74,7 @@ export function useProbabilidades(): UseProbabilidadesResult {
 
     // Caché expirada o vacía → fetch a Supabase
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const { data, error: fetchErr } = await supabase
         .from("probabilidades")
         .select("id, animal, emoji, numero, peso, activo, updated_at")
@@ -92,16 +99,27 @@ export function useProbabilidades(): UseProbabilidadesResult {
       }
     } catch (err: any) {
       console.warn("useProbabilidades: error fetching from Supabase:", err);
-      setError(err?.message ?? "Error desconocido");
-      setRows([]);
+      if (!silent) setError(err?.message ?? "Error desconocido");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchRows();
-  }, [fetchRows]);
+    if (staleData !== null && !isStale) {
+      // Caché fresca: no necesitamos hacer nada
+      setIsLoading(false);
+      return;
+    }
+    if (staleData !== null && isStale) {
+      // Caché expirada: tenemos datos viejos visibles, refrescar silenciosamente
+      fetchRows(true);
+    } else {
+      // Sin caché: fetch normal con loading
+      fetchRows(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Escuchar evento local del admin: invalida caché y hace refetch fresco
   useEffect(() => {

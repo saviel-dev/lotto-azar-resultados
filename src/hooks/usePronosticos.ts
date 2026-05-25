@@ -2,12 +2,13 @@
  * usePronosticos — Lee los pronósticos de la tabla `pronosticos` en Supabase.
  * - Caché localStorage de 1 hora (los pronósticos cambian raramente en el día).
  * - SIN suscripción Realtime (innecesario para datos que cambian poco).
- * - Si hay caché válida, no llama a Supabase → 0 egress en visitas repetidas.
+ * - Stale-while-revalidate: si hay caché (aunque expirada), muestra los datos
+ *   inmediatamente sin spinner y refresca Supabase silenciosamente en fondo.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { getCached, setCached, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
+import { getCachedStale, setCached, CACHE_KEYS, CACHE_TTL } from "@/lib/cache";
 
 export interface Pronostico {
   id: number;
@@ -25,24 +26,19 @@ interface UsePronosticosResult {
 }
 
 export function usePronosticos(): UsePronosticosResult {
-  // Inicializar desde caché inmediatamente (sin spinner visible)
-  const [pronosticos, setPronosticos] = useState<Pronostico[]>(() => {
-    return getCached<Pronostico[]>(CACHE_KEYS.PRONOSTICOS, CACHE_TTL.PRONOSTICOS_MS) ?? [];
-  });
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: inicializar desde caché (aunque esté expirada)
+  const { data: staleData, isStale } = getCachedStale<Pronostico[]>(
+    CACHE_KEYS.PRONOSTICOS,
+    CACHE_TTL.PRONOSTICOS_MS
+  );
+
+  const [pronosticos, setPronosticos] = useState<Pronostico[]>(staleData ?? []);
+  // Si hay datos (aunque viejos), no mostramos spinner inicial
+  const [loading, setLoading] = useState(staleData === null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPronosticos = useCallback(async () => {
-    // Si hay caché válida (< 1 hora), usarla directamente
-    const cached = getCached<Pronostico[]>(CACHE_KEYS.PRONOSTICOS, CACHE_TTL.PRONOSTICOS_MS);
-    if (cached && cached.length > 0) {
-      setPronosticos(cached);
-      setLoading(false);
-      return;
-    }
-
-    // Caché expirada o vacía → fetch a Supabase
-    setLoading(true);
+  const fetchPronosticos = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
 
     const { data, error: sbErr } = await supabase
@@ -51,8 +47,10 @@ export function usePronosticos(): UsePronosticosResult {
       .order("hora", { ascending: true });
 
     if (sbErr) {
-      setError(sbErr.message);
-      setLoading(false);
+      if (!silent) {
+        setError(sbErr.message);
+        setLoading(false);
+      }
       return;
     }
 
@@ -70,17 +68,25 @@ export function usePronosticos(): UsePronosticosResult {
     // Guardar en caché por 1 hora
     setCached(CACHE_KEYS.PRONOSTICOS, mapped);
     setPronosticos(mapped);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchPronosticos();
-  }, [fetchPronosticos]);
+    if (staleData !== null && !isStale) {
+      // Caché fresca: no hacer nada, ya inicializamos con ella
+      setLoading(false);
+      return;
+    }
 
-  // NOTA: Suscripción Realtime ELIMINADA intencionalmente.
-  // Los pronósticos los publica el admin esporádicamente durante el día.
-  // Los usuarios ven la versión cacheada por hasta 1h sin consumir egress.
-  // Si se requiere actualización inmediata en el futuro, se puede re-activar.
+    if (staleData !== null && isStale) {
+      // Caché expirada: tenemos datos viejos visibles, refrescar en background
+      fetchPronosticos(true);
+    } else {
+      // Sin caché: fetch normal con spinner
+      fetchPronosticos(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { pronosticos, loading, error };
 }

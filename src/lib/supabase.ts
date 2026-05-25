@@ -8,6 +8,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co', 
-  supabaseAnonKey || 'placeholder_key'
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder_key',
+  {
+    auth: {
+      persistSession: false,   // No guardar sesión anónima en localStorage
+      autoRefreshToken: false, // No refrescar JWT cada hora (ahorra egress)
+    },
+  }
 )
