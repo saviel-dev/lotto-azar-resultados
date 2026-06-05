@@ -1782,10 +1782,10 @@ const SectionSorteos = () => {
     e.preventDefault();
     if (!scannerInput.trim()) return;
 
-    // Buscar el animal por número (soportando "0" o "00", "01" etc)
+    const input = scannerInput.trim();
+    // Buscar el animal por número (soportando "0", "00", "1"->"01" etc)
     const animalMatch = ANIMALS.find(
-      (a) => String(a.number).padStart(2, "0") === scannerInput.trim().padStart(2, "0")
-          || String(a.number) === scannerInput.trim()
+      (a) => a.number === input || (input.length === 1 && input !== "0" && a.number === "0" + input)
     );
 
     if (!animalMatch) {
@@ -1902,7 +1902,7 @@ const SectionSorteos = () => {
     (r) =>
       r.animal.toLowerCase().includes(search.toLowerCase()) ||
       r.date.includes(search) ||
-      String(r.number).includes(search)
+      formatAnimalNumber(r.animal, r.number).includes(search)
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;

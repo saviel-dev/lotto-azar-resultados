@@ -142,7 +142,7 @@ begin
       ('Pulpo',          '🐙', '52',  7),
       ('Caracol',        '🐌', '53',  5),
       ('Grillo',         '🦗', '54',  4),
-      ('Oso Hormiguero', '🐜', '55',  6),
+      ('Oso Hormiguero', '🐽', '55',  6),
       ('Tiburón',        '🦈', '56', 18),
       ('Pato',           '🦆', '57', 13),
       ('Hormiga',        '🐜', '58',  5),

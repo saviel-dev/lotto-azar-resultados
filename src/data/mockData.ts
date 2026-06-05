@@ -64,7 +64,7 @@ export const ANIMALS = [
   { name: "Pulpo", emoji: "🐙", number: "52" },
   { name: "Caracol", emoji: "🐌", number: "53" },
   { name: "Grillo", emoji: "🦗", number: "54" },
-  { name: "Oso Hormiguero", emoji: "🐜", number: "55" },
+  { name: "Oso Hormiguero", emoji: "🐽", number: "55" },
   { name: "Tiburón", emoji: "🦈", number: "56" },
   { name: "Pato", emoji: "🦆", number: "57" },
   { name: "Hormiga", emoji: "🐜", number: "58" },
