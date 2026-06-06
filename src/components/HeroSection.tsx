@@ -251,8 +251,8 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
           backgroundImage: `url('${bannerUrl}')`,
           backgroundSize: "cover",
           backgroundPosition: "center",
-          filter: "blur(14px)",
-          transform: "scale(1.12)",
+          filter: "blur(5px)",
+          transform: "scale(1)",
         }}
       />
       {/* Overlay oscuro principal */}
