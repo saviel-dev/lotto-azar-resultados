@@ -42,6 +42,10 @@ import {
   Search,
   Sun,
   Moon,
+  Upload,
+  Image,
+  RotateCcw,
+  CheckCircle2,
 } from "lucide-react";
 import {
   ANIMALS,
@@ -56,6 +60,7 @@ import { LS_WEIGHTS_KEY, type SorteoMode } from "@/hooks/useProyeccion";
 import { SectionCarrusel as SectionCarruselAdmin } from "@/components/SectionCarrusel";
 import { useProbabilidades, type ProbabilidadRow, PROB_UPDATED_EVENT } from "@/hooks/useProbabilidades";
 import { useTheme } from "@/hooks/useTheme";
+import { PARTICLE_THEMES, PARTICLE_THEME_LS_KEY, type ParticleTheme } from "@/components/HeroSection";
 import { clearCache, CACHE_KEYS } from "@/lib/cache";
 
 /* ── helpers ────────────────────────────────────────────────────── */
@@ -360,6 +365,287 @@ const DEFAULT_CONFIG: BetConfig = {
   monto_maximo: 10000,
   multiplicador_normal: 70,
   multiplicador_comodin: 140,
+};
+
+/* ════════════════════════════════════════════════════════════════
+   Tarjeta: Imagen de fondo del Hero
+════════════════════════════════════════════════════════════════ */
+const HERO_BANNER_LS_KEY = "lotto_hero_banner_url";
+const DEFAULT_BANNER = "/images/banner.png";
+
+const HeroBannerCard = () => {
+  const [currentUrl, setCurrentUrl] = React.useState<string>(
+    () => localStorage.getItem(HERO_BANNER_LS_KEY) || DEFAULT_BANNER
+  );
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [justSaved, setJustSaved] = React.useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const applyBanner = (url: string) => {
+    localStorage.setItem(HERO_BANNER_LS_KEY, url);
+    setCurrentUrl(url);
+    // Notificar a todos los listeners del hero
+    window.dispatchEvent(new CustomEvent("heroBannerChanged", { detail: { url } }));
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2500);
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      sileo.error({ title: "Archivo inválido", description: "Solo se aceptan imágenes.", duration: 2000 });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      sileo.error({ title: "Archivo muy grande", description: "Máximo 5 MB por imagen.", duration: 2000 });
+      return;
+    }
+
+    // Preview local inmediato
+    const localUrl = URL.createObjectURL(file);
+    setPreviewUrl(localUrl);
+    setIsUploading(true);
+
+    try {
+      // Intentar subir a Supabase Storage
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `banner.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("hero-banner")
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      if (!uploadError) {
+        const { data: publicData } = supabase.storage
+          .from("hero-banner")
+          .getPublicUrl(path);
+        applyBanner(publicData.publicUrl);
+        setPreviewUrl(null);
+        sileo.success({ title: "Banner actualizado", description: "La imagen se guardó en el servidor.", duration: 2500 });
+      } else {
+        // Fallback: guardar como base64 en localStorage
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64 = e.target?.result as string;
+          applyBanner(base64);
+          setPreviewUrl(null);
+          sileo.success({ title: "Banner actualizado", description: "Imagen guardada localmente en este navegador.", duration: 2500 });
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      // Fallback a base64
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64 = e.target?.result as string;
+        applyBanner(base64);
+        setPreviewUrl(null);
+        sileo.success({ title: "Banner actualizado", description: "Imagen guardada localmente.", duration: 2500 });
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleRestoreDefault = () => {
+    localStorage.removeItem(HERO_BANNER_LS_KEY);
+    setCurrentUrl(DEFAULT_BANNER);
+    setPreviewUrl(null);
+    window.dispatchEvent(new CustomEvent("heroBannerChanged", { detail: { url: DEFAULT_BANNER } }));
+    sileo.success({ title: "Banner restablecido", description: "Se restauró la imagen predeterminada.", duration: 2000 });
+  };
+
+  const displayUrl = previewUrl || currentUrl;
+  const isDefault = currentUrl === DEFAULT_BANNER;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3.5 bg-gradient-to-r from-violet-600 to-purple-600 rounded-t-2xl">
+        <Image className="h-4 w-4 text-white" />
+        <span className="text-sm font-bold text-white">🖼️ Imagen de fondo del Hero</span>
+        <span className="ml-auto text-[11px] text-purple-200 font-medium">Banner principal</span>
+      </div>
+
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-gray-500">
+          Esta imagen se muestra como fondo en la sección principal del sitio. Sube una nueva imagen (JPG, PNG, WebP · máx. 5 MB).
+        </p>
+
+        {/* Preview actual */}
+        <div className="relative rounded-xl overflow-hidden border border-gray-200 aspect-[3/1] w-full bg-gray-100">
+          <img
+            src={displayUrl}
+            alt="Vista previa del banner"
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_BANNER; }}
+          />
+          {/* Overlay con efecto igual al hero */}
+          <div className="absolute inset-0" style={{ backgroundColor: "rgba(6,14,48,0.55)" }} />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-white text-xs font-semibold tracking-wide bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm">
+              Vista previa del Hero
+            </span>
+          </div>
+          {isUploading && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2 text-white">
+                <svg className="animate-spin h-7 w-7" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" />
+                </svg>
+                <span className="text-xs font-medium">Subiendo...</span>
+              </div>
+            </div>
+          )}
+          {justSaved && !isUploading && (
+            <div className="absolute top-2 right-2">
+              <span className="flex items-center gap-1 text-xs font-semibold text-white bg-emerald-500 px-2 py-1 rounded-full shadow">
+                <CheckCircle2 className="h-3 w-3" /> Guardado
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Zona de arrastre / botón de subida */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`relative cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200 p-6 flex flex-col items-center justify-center gap-2 group ${
+            isDragging
+              ? "border-violet-500 bg-violet-50"
+              : "border-gray-200 hover:border-violet-400 hover:bg-violet-50/50"
+          }`}
+        >
+          <Upload className={`h-7 w-7 transition-colors ${ isDragging ? "text-violet-500" : "text-gray-400 group-hover:text-violet-500" }`} />
+          <p className="text-sm font-medium text-gray-600 group-hover:text-violet-700 transition-colors">
+            {isDragging ? "Suelta la imagen aquí" : "Haz clic o arrastra una imagen"}
+          </p>
+          <p className="text-[11px] text-gray-400">JPG, PNG, WebP · máx. 5 MB</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+        </div>
+
+        {/* Botón restaurar predeterminado */}
+        {!isDefault && (
+          <button
+            onClick={handleRestoreDefault}
+            className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-rose-500 transition-colors"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Restaurar imagen predeterminada
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ════════════════════════════════════════════════════════════════
+   Tarjeta: Temática de partículas del Hero
+════════════════════════════════════════════════════════════════ */
+const THEME_META: { id: ParticleTheme; accentFrom: string; accentTo: string; bgSelected: string; borderSelected: string; shadowSelected: string }[] = [
+  { id: "loteria",  accentFrom: "#7c3aed", accentTo: "#a855f7", bgSelected: "bg-violet-50",  borderSelected: "border-violet-500",  shadowSelected: "shadow-violet-100" },
+  { id: "futbol",   accentFrom: "#16a34a", accentTo: "#22c55e", bgSelected: "bg-green-50",   borderSelected: "border-green-500",   shadowSelected: "shadow-green-100" },
+  { id: "baseball", accentFrom: "#b45309", accentTo: "#f59e0b", bgSelected: "bg-amber-50",   borderSelected: "border-amber-500",   shadowSelected: "shadow-amber-100" },
+  { id: "clasico",  accentFrom: "#0e4d8a", accentTo: "#3b82f6", bgSelected: "bg-blue-50",    borderSelected: "border-blue-500",    shadowSelected: "shadow-blue-100" },
+];
+
+const ParticleThemeCard = () => {
+  const [active, setActive] = React.useState<ParticleTheme>(
+    () => (localStorage.getItem(PARTICLE_THEME_LS_KEY) as ParticleTheme) || "loteria"
+  );
+
+  const applyTheme = (theme: ParticleTheme) => {
+    localStorage.setItem(PARTICLE_THEME_LS_KEY, theme);
+    setActive(theme);
+    window.dispatchEvent(new CustomEvent("heroParticleThemeChanged", { detail: { theme } }));
+    sileo.success({
+      title: `Temática: ${PARTICLE_THEMES[theme].label}`,
+      description: "Las partículas del Hero se actualizaron al instante.",
+      duration: 2000,
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-500 rounded-t-2xl">
+        <Zap className="h-4 w-4 text-white" />
+        <span className="text-sm font-bold text-white">✨ Temática de partículas</span>
+        <span className="ml-auto text-[11px] text-blue-200 font-medium">Hero · animación flotante</span>
+      </div>
+
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-gray-500">
+          Elige los emojis flotantes que se verán en el fondo del Hero. El cambio se aplica en tiempo real.
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {THEME_META.map((t) => {
+            const themeData = PARTICLE_THEMES[t.id];
+            const isSelected = active === t.id;
+            return (
+              <button
+                key={t.id}
+                id={`particle-theme-${t.id}`}
+                onClick={() => applyTheme(t.id)}
+                className={`relative flex flex-col items-center gap-2.5 p-4 rounded-xl border-2 transition-all duration-200 ${
+                  isSelected
+                    ? `${t.borderSelected} ${t.bgSelected} shadow-md ${t.shadowSelected}`
+                    : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100"
+                }`}
+              >
+                {/* Mini preview de 5 emojis */}
+                <div className="w-full h-12 rounded-lg overflow-hidden flex items-center justify-center flex-wrap gap-0.5"
+                  style={{
+                    background: isSelected
+                      ? `linear-gradient(135deg, ${t.accentFrom}22, ${t.accentTo}11)`
+                      : "#f1f5f9",
+                    border: isSelected ? `1px solid ${t.accentFrom}44` : "1px solid #e2e8f0",
+                  }}
+                >
+                  {themeData.icons.slice(0, 5).map((icon, idx) => (
+                    <span key={idx} className="text-base leading-none">{icon}</span>
+                  ))}
+                </div>
+
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-lg leading-none">{themeData.emoji}</span>
+                  <span className={`text-xs font-semibold ${ isSelected ? "text-gray-800" : "text-gray-600" }`}>
+                    {themeData.label}
+                  </span>
+                </div>
+
+                {isSelected && (
+                  <span
+                    className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: t.accentFrom }}
+                  >
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 /* ════════════════════════════════════════════════════════════════
@@ -792,6 +1078,12 @@ const SectionConfiguracion = () => {
               )}
             </button>
           </div>
+
+          {/* ── Temática de partículas ────── */}
+          <ParticleThemeCard />
+
+          {/* ── Imagen de fondo del Hero ────── */}
+          <HeroBannerCard />
 
           {/* ── Tema del sitio público ────── */}
           <ThemeToggleCard />

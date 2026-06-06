@@ -66,21 +66,50 @@ function secondsToNext(activeIdx: number): number {
 }
 
 /* ─── Partículas flotantes ─────────────────────────────────────── */
-const LOTTERY_ICONS = ["🎰", "🎲", "💰", "⭐", "🌟", "💫", "🍀", "🎯", "🏆", "💎", "🃏", "🎴", "✨", "🪙", "🎊"];
+export type ParticleTheme = "loteria" | "futbol" | "baseball" | "clasico";
+
+export const PARTICLE_THEMES: Record<ParticleTheme, { label: string; emoji: string; icons: string[] }> = {
+  loteria: {
+    label: "Lotería",
+    emoji: "🎰",
+    icons: ["🎰", "🎲", "💰", "⭐", "🌟", "💫", "🍀", "🎯", "🏆", "💎", "🃏", "🎴", "✨", "🪙", "🎊"],
+  },
+  futbol: {
+    label: "Fútbol",
+    emoji: "⚽",
+    icons: ["⚽", "🥅", "👟", "🏟️", "🥇", "🏆", "🎽", "🌟", "💪", "🔥", "🎯", "📣", "👑", "⚡", "🎉"],
+  },
+  baseball: {
+    label: "Baseball",
+    emoji: "⚾",
+    icons: ["⚾", "🏏", "🧢", "🥇", "🏆", "🌟", "💪", "🔥", "🎯", "📣", "👑", "⚡", "🎽", "✨", "🎉"],
+  },
+  clasico: {
+    label: "Clásico",
+    emoji: "🏛️",
+    icons: ["🏛️", "⭐", "👑", "🌟", "💫", "✨", "🎖️", "🥇", "🏅", "💎", "🔮", "🕊️", "🌙", "☀️", "🪄"],
+  },
+};
+
+export const PARTICLE_THEME_LS_KEY = "lotto_particle_theme";
+
 function seeded(n: number) { const x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); }
-const PARTICLES = Array.from({ length: 16 }, (_, i) => ({
-  id: i,
-  icon: LOTTERY_ICONS[Math.floor(seeded(i) * LOTTERY_ICONS.length)],
-  x: seeded(i + 50) * 95,
-  y: seeded(i + 100) * 80,
-  size: `${1 + seeded(i + 150) * 1.2}rem`,
-  opacity: 0.2 + seeded(i + 200) * 0.4,
-  duration: 4 + seeded(i + 250) * 5,
-  delay: seeded(i + 300) * 4,
-  drift: 30 + seeded(i + 350) * 50,
-  rotate: seeded(i + 400) * 360 - 180,
-  spin: (seeded(i + 450) > 0.5 ? 1 : -1) * (20 + seeded(i + 500) * 60),
-}));
+
+function buildParticles(icons: string[]) {
+  return Array.from({ length: 16 }, (_, i) => ({
+    id: i,
+    icon: icons[Math.floor(seeded(i) * icons.length)],
+    x: seeded(i + 50) * 95,
+    y: seeded(i + 100) * 80,
+    size: `${1 + seeded(i + 150) * 1.2}rem`,
+    opacity: 0.2 + seeded(i + 200) * 0.4,
+    duration: 4 + seeded(i + 250) * 5,
+    delay: seeded(i + 300) * 4,
+    drift: 30 + seeded(i + 350) * 50,
+    rotate: seeded(i + 400) * 360 - 180,
+    spin: (seeded(i + 450) > 0.5 ? 1 : -1) * (20 + seeded(i + 500) * 60),
+  }));
+}
 
 /* ─── Props ────────────────────────────────────────────────────── */
 interface HeroSectionProps {
@@ -98,9 +127,38 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const [countdown, setCountdown] = useState(() => secondsToNext(getCurrentHourIndex()));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Tema de partículas dinámico
+  const [particles, setParticles] = useState(() => {
+    const saved = (localStorage.getItem(PARTICLE_THEME_LS_KEY) as ParticleTheme) || "loteria";
+    return buildParticles(PARTICLE_THEMES[saved]?.icons ?? PARTICLE_THEMES.loteria.icons);
+  });
+
+  useEffect(() => {
+    const onThemeChange = (e: Event) => {
+      const theme = (e as CustomEvent<{ theme: ParticleTheme }>).detail.theme;
+      setParticles(buildParticles(PARTICLE_THEMES[theme]?.icons ?? PARTICLE_THEMES.loteria.icons));
+    };
+    window.addEventListener("heroParticleThemeChanged", onThemeChange);
+    return () => window.removeEventListener("heroParticleThemeChanged", onThemeChange);
+  }, []);
+
   // Datos reales de sorteos
   const { results, loading } = useSorteosContext();
   const today = getTodayStr();
+
+  // Banner de fondo dinámico (configurable desde Ajustes)
+  const [bannerUrl, setBannerUrl] = useState<string>(
+    () => localStorage.getItem("lotto_hero_banner_url") || "/images/banner.png"
+  );
+
+  useEffect(() => {
+    const onBannerChange = (e: Event) => {
+      const url = (e as CustomEvent<{ url: string }>).detail.url;
+      setBannerUrl(url);
+    };
+    window.addEventListener("heroBannerChanged", onBannerChange);
+    return () => window.removeEventListener("heroBannerChanged", onBannerChange);
+  }, []);
 
   /** Busca el resultado real para la hora mostrada. Si no existe, retorna null. */
   const getResult = useCallback(
@@ -172,7 +230,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: "url('/images/banner.png')",
+          backgroundImage: `url('${bannerUrl}')`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           filter: "blur(6px)",
@@ -185,7 +243,7 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
       />
 
       {/* ── Partículas flotantes ────────────────────────────────── */}
-      {PARTICLES.map((p) => (
+      {particles.map((p) => (
         <motion.span
           key={p.id}
           className="absolute pointer-events-none select-none z-[5]"
