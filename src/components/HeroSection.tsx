@@ -244,20 +244,28 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
       className="w-full min-h-[46vh] sm:min-h-[54vh] flex flex-col items-center justify-center px-3 sm:px-4 py-4 sm:py-6 relative overflow-hidden"
       aria-label="Resultado del sorteo en vivo"
     >
-      {/* ── Fondo ──────────────────────────────────────────────── */}
+      {/* ── Fondo (imagen de fondo con blur fuerte para ocultar texto) ── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage: `url('${bannerUrl}')`,
           backgroundSize: "cover",
           backgroundPosition: "center",
-          filter: "blur(6px)",
-          transform: "scale(1.06)",
+          filter: "blur(14px)",
+          transform: "scale(1.12)",
         }}
       />
+      {/* Overlay oscuro principal */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: "rgba(6, 14, 48, 0.80)" }}
+        style={{ backgroundColor: "rgba(6, 14, 48, 0.88)" }}
+      />
+      {/* Vignette radial: bordes más oscuros, centro más claro → mejor contraste */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, rgba(2,6,28,0.55) 100%)",
+        }}
       />
 
       {/* ── Partículas flotantes ────────────────────────────────── */}
