@@ -572,19 +572,26 @@ const THEME_META: { id: ParticleTheme; accentFrom: string; accentTo: string; bgS
 ];
 
 const ParticleThemeCard = () => {
-  const [active, setActive] = React.useState<ParticleTheme>(
-    () => (localStorage.getItem(PARTICLE_THEME_LS_KEY) as ParticleTheme) || "loteria"
-  );
+  // La DB es la fuente de verdad. useSiteConfig: DB → localStorage → "loteria"
+  const { value: activeRaw, save: saveTheme, isSaving } = useSiteConfig("hero_particle_theme", "loteria");
+  const active = (activeRaw as ParticleTheme) || "loteria";
 
-  const applyTheme = (theme: ParticleTheme) => {
-    localStorage.setItem(PARTICLE_THEME_LS_KEY, theme);
-    setActive(theme);
+  const applyTheme = async (theme: ParticleTheme) => {
+    // 1. Actualizar el hero al instante (evento + localStorage cache)
+    try { localStorage.setItem(PARTICLE_THEME_LS_KEY, theme); } catch { /* ignorar */ }
     window.dispatchEvent(new CustomEvent("heroParticleThemeChanged", { detail: { theme } }));
-    sileo.success({
-      title: `Temática: ${PARTICLE_THEMES[theme].label}`,
-      description: "Las partículas del Hero se actualizaron al instante.",
-      duration: 2000,
-    });
+
+    // 2. Persistir en la DB (actualiza activeRaw → re-render del botón activo)
+    try {
+      await saveTheme(theme);
+      sileo.success({
+        title: `Temática: ${PARTICLE_THEMES[theme].label}`,
+        description: "Guardado en la base de datos.",
+        duration: 2000,
+      });
+    } catch {
+      sileo.error({ title: "Error", description: "No se pudo guardar la temática en la DB.", duration: 2000 });
+    }
   };
 
   return (
@@ -592,12 +599,12 @@ const ParticleThemeCard = () => {
       <div className="flex items-center gap-2 px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-500 rounded-t-2xl">
         <Zap className="h-4 w-4 text-white" />
         <span className="text-sm font-bold text-white">✨ Temática de partículas</span>
-        <span className="ml-auto text-[11px] text-blue-200 font-medium">Hero · animación flotante</span>
+        <span className="ml-auto text-[11px] text-blue-200 font-medium">Hero · animación flotante · DB</span>
       </div>
 
       <div className="p-5 space-y-4">
         <p className="text-xs text-gray-500">
-          Elige los emojis flotantes que se verán en el fondo del Hero. El cambio se aplica en tiempo real.
+          Elige los emojis flotantes que se verán en el fondo del Hero. El cambio se aplica en tiempo real y se guarda en la base de datos.
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

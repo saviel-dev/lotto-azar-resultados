@@ -4,6 +4,8 @@
  * Estrategia:
  *  - Al montar: lee el valor de la DB. Mientras carga, devuelve el valor de
  *    localStorage como fallback (evita flash de contenido por defecto).
+ *  - Realtime: suscripción a cambios en site_config → actualiza en vivo en
+ *    todos los navegadores/tabs sin necesidad de recargar la página.
  *  - Al guardar: escribe en DB y actualiza localStorage como caché local.
  *  - Si la tabla no existe o falla, opera solo con localStorage silenciosamente.
  */
@@ -30,11 +32,17 @@ export function useSiteConfig(key: string, defaultValue: string): UseSiteConfigR
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Cargar valor real desde la DB al montar
+  // Aplicar un valor recibido de la DB y sincronizar caché local
+  const applyDbValue = useCallback((dbValue: string) => {
+    setValue(dbValue);
+    try { localStorage.setItem(lsKey, dbValue); } catch { /* ignorar */ }
+  }, [lsKey]);
+
+  // 1. Cargar valor inicial desde la DB al montar
   useEffect(() => {
     let cancelled = false;
 
-    const fetch = async () => {
+    const fetchInitial = async () => {
       try {
         const { data, error } = await supabase
           .from("site_config")
@@ -43,13 +51,7 @@ export function useSiteConfig(key: string, defaultValue: string): UseSiteConfigR
           .single();
 
         if (cancelled) return;
-
-        if (!error && data?.value) {
-          const dbValue = data.value as string;
-          setValue(dbValue);
-          // Sincronizar caché local
-          try { localStorage.setItem(lsKey, dbValue); } catch { /* ignorar */ }
-        }
+        if (!error && data?.value) applyDbValue(data.value as string);
       } catch {
         // Tabla no disponible → seguir con localStorage/default
       } finally {
@@ -57,11 +59,38 @@ export function useSiteConfig(key: string, defaultValue: string): UseSiteConfigR
       }
     };
 
-    fetch();
+    fetchInitial();
     return () => { cancelled = true; };
-  }, [key, lsKey]);
+  }, [key, applyDbValue]);
 
-  // Guardar en DB + localStorage
+  // 2. Suscripción Realtime: recibe cambios de otros admins/tabs en tiempo real
+  useEffect(() => {
+    const channel = supabase
+      .channel(`site_config:${key}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",           // INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "site_config",
+          filter: `key=eq.${key}`,
+        },
+        (payload) => {
+          // payload.new contiene la fila actualizada
+          const newRow = payload.new as { key: string; value: string } | null;
+          if (newRow?.value !== undefined) {
+            applyDbValue(newRow.value);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [key, applyDbValue]);
+
+  // 3. Guardar en DB + localStorage
   const save = useCallback(async (newValue: string) => {
     setIsSaving(true);
     try {
@@ -71,17 +100,17 @@ export function useSiteConfig(key: string, defaultValue: string): UseSiteConfigR
 
       if (error) throw error;
 
-      setValue(newValue);
-      try { localStorage.setItem(lsKey, newValue); } catch { /* ignorar */ }
+      // El canal Realtime notificará a todos los tabs/browsers, pero
+      // actualizamos localmente de inmediato para que el admin no espere
+      applyDbValue(newValue);
     } catch (err) {
-      // Si falla la DB, al menos guardar en localStorage
-      setValue(newValue);
-      try { localStorage.setItem(lsKey, newValue); } catch { /* ignorar */ }
-      throw err; // re-lanzar para que el caller pueda mostrar el error
+      // Si falla la DB, al menos aplicar localmente
+      applyDbValue(newValue);
+      throw err;
     } finally {
       setIsSaving(false);
     }
-  }, [key, lsKey]);
+  }, [key, applyDbValue]);
 
   return { value, isLoading, save, isSaving };
 }

@@ -128,45 +128,55 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const [countdown, setCountdown] = useState(() => secondsToNext(getCurrentHourIndex()));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tema de partículas dinámico
-  const [particles, setParticles] = useState(() => {
-    const saved = (localStorage.getItem(PARTICLE_THEME_LS_KEY) as ParticleTheme) || "loteria";
-    return buildParticles(PARTICLE_THEMES[saved]?.icons ?? PARTICLE_THEMES.loteria.icons);
-  });
+  // ── Partículas: DB es la fuente de verdad ───────────────────────
+  // useSiteConfig: DB → localStorage → "loteria"
+  const { value: particleThemeRaw } = useSiteConfig("hero_particle_theme", "loteria");
+  const particleTheme = (particleThemeRaw as ParticleTheme) || "loteria";
+
+  // Estado local solo para actualizaciones en vivo del admin (evento llega antes que la DB)
+  const [liveThemeOverride, setLiveThemeOverride] = useState<ParticleTheme | null>(null);
 
   useEffect(() => {
     const onThemeChange = (e: Event) => {
       const theme = (e as CustomEvent<{ theme: ParticleTheme }>).detail.theme;
-      setParticles(buildParticles(PARTICLE_THEMES[theme]?.icons ?? PARTICLE_THEMES.loteria.icons));
+      setLiveThemeOverride(theme);
     };
     window.addEventListener("heroParticleThemeChanged", onThemeChange);
     return () => window.removeEventListener("heroParticleThemeChanged", onThemeChange);
   }, []);
 
-  // Datos reales de sorteos
-  const { results, loading } = useSorteosContext();
-  const today = getTodayStr();
-
-  // Banner de fondo — lee de la DB (site_config) con localStorage como fallback instantáneo
-  const { value: bannerFromDb } = useSiteConfig("hero_banner_url", "/images/banner.png");
-  const [bannerUrl, setBannerUrl] = useState<string>(
-    () => localStorage.getItem("lotto_hero_banner_url") || "/images/banner.png"
-  );
-
-  // Sincronizar cuando la DB responde con el valor real
+  // Cuando la DB confirma, limpiar el override local (ya no es necesario)
   useEffect(() => {
-    if (bannerFromDb) setBannerUrl(bannerFromDb);
-  }, [bannerFromDb]);
+    setLiveThemeOverride(null);
+  }, [particleThemeRaw]);
 
-  // Actualizar en vivo cuando el admin cambia el banner desde el panel
+  const activeTheme = liveThemeOverride ?? particleTheme;
+  const particles = buildParticles(PARTICLE_THEMES[activeTheme]?.icons ?? PARTICLE_THEMES.loteria.icons);
+
+  // ── Banner: DB es la fuente de verdad ───────────────────────────
+  // useSiteConfig: DB → localStorage → "/images/banner.png"
+  const { value: bannerFromDb } = useSiteConfig("hero_banner_url", "/images/banner.png");
+  const [livebannerOverride, setLiveBannerOverride] = useState<string | null>(null);
+
   useEffect(() => {
     const onBannerChange = (e: Event) => {
       const url = (e as CustomEvent<{ url: string }>).detail.url;
-      setBannerUrl(url);
+      setLiveBannerOverride(url);
     };
     window.addEventListener("heroBannerChanged", onBannerChange);
     return () => window.removeEventListener("heroBannerChanged", onBannerChange);
   }, []);
+
+  // Cuando la DB confirma, limpiar override local
+  useEffect(() => {
+    setLiveBannerOverride(null);
+  }, [bannerFromDb]);
+
+  const bannerUrl = livebannerOverride ?? bannerFromDb;
+
+  // Datos reales de sorteos
+  const { results, loading } = useSorteosContext();
+  const today = getTodayStr();
 
   /** Busca el resultado real para la hora mostrada. Si no existe, retorna null. */
   const getResult = useCallback(
