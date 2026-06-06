@@ -60,6 +60,7 @@ import { LS_WEIGHTS_KEY, type SorteoMode } from "@/hooks/useProyeccion";
 import { SectionCarrusel as SectionCarruselAdmin } from "@/components/SectionCarrusel";
 import { useProbabilidades, type ProbabilidadRow, PROB_UPDATED_EVENT } from "@/hooks/useProbabilidades";
 import { useTheme } from "@/hooks/useTheme";
+import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { PARTICLE_THEMES, PARTICLE_THEME_LS_KEY, type ParticleTheme } from "@/components/HeroSection";
 import { clearCache, CACHE_KEYS } from "@/lib/cache";
 
@@ -370,23 +371,22 @@ const DEFAULT_CONFIG: BetConfig = {
 /* ════════════════════════════════════════════════════════════════
    Tarjeta: Imagen de fondo del Hero
 ════════════════════════════════════════════════════════════════ */
-const HERO_BANNER_LS_KEY = "lotto_hero_banner_url";
 const DEFAULT_BANNER = "/images/banner.png";
 
 const HeroBannerCard = () => {
-  const [currentUrl, setCurrentUrl] = React.useState<string>(
-    () => localStorage.getItem(HERO_BANNER_LS_KEY) || DEFAULT_BANNER
-  );
+  // Lee y escribe en la tabla site_config de Supabase (con fallback a localStorage)
+  const { value: currentUrl, save: saveBanner, isSaving } = useSiteConfig("hero_banner_url", DEFAULT_BANNER);
+
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [isUploading, setIsUploading] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [justSaved, setJustSaved] = React.useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const applyBanner = (url: string) => {
-    localStorage.setItem(HERO_BANNER_LS_KEY, url);
-    setCurrentUrl(url);
-    // Notificar a todos los listeners del hero
+  // Notificar al Hero del sitio con el nuevo URL
+  const notifyHero = (url: string) => {
+    // Mantener localStorage en sincó para la carga instantánea
+    try { localStorage.setItem("lotto_hero_banner_url", url); } catch { /* ignorar */ }
     window.dispatchEvent(new CustomEvent("heroBannerChanged", { detail: { url } }));
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2500);
@@ -403,46 +403,49 @@ const HeroBannerCard = () => {
     }
 
     // Preview local inmediato
-    const localUrl = URL.createObjectURL(file);
-    setPreviewUrl(localUrl);
+    const localObjectUrl = URL.createObjectURL(file);
+    setPreviewUrl(localObjectUrl);
     setIsUploading(true);
 
     try {
-      // Intentar subir a Supabase Storage
+      // 1° Subir a Supabase Storage
       const ext = file.name.split(".").pop() || "jpg";
       const path = `banner.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("hero-banner")
         .upload(path, file, { upsert: true, contentType: file.type });
 
+      let finalUrl: string;
+
       if (!uploadError) {
-        const { data: publicData } = supabase.storage
-          .from("hero-banner")
-          .getPublicUrl(path);
-        applyBanner(publicData.publicUrl);
-        setPreviewUrl(null);
-        sileo.success({ title: "Banner actualizado", description: "La imagen se guardó en el servidor.", duration: 2500 });
+        // Obtener URL pública del storage
+        const { data: publicData } = supabase.storage.from("hero-banner").getPublicUrl(path);
+        finalUrl = publicData.publicUrl;
       } else {
-        // Fallback: guardar como base64 en localStorage
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64 = e.target?.result as string;
-          applyBanner(base64);
-          setPreviewUrl(null);
-          sileo.success({ title: "Banner actualizado", description: "Imagen guardada localmente en este navegador.", duration: 2500 });
-        };
-        reader.readAsDataURL(file);
+        // Fallback: base64 si Storage no está disponible
+        finalUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.readAsDataURL(file);
+        });
       }
-    } catch {
-      // Fallback a base64
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string;
-        applyBanner(base64);
-        setPreviewUrl(null);
-        sileo.success({ title: "Banner actualizado", description: "Imagen guardada localmente.", duration: 2500 });
-      };
-      reader.readAsDataURL(file);
+
+      // 2° Guardar la URL en la tabla site_config (DB)
+      await saveBanner(finalUrl);
+      setPreviewUrl(null);
+      notifyHero(finalUrl);
+
+      sileo.success({
+        title: "Banner actualizado",
+        description: uploadError
+          ? "Guardado localmente (Storage no disponible)."
+          : "La imagen se guardó en la base de datos.",
+        duration: 2500,
+      });
+    } catch (err) {
+      console.error("Error al guardar banner:", err);
+      sileo.error({ title: "Error", description: "No se pudo guardar el banner.", duration: 2500 });
+      setPreviewUrl(null);
     } finally {
       setIsUploading(false);
     }
@@ -455,28 +458,31 @@ const HeroBannerCard = () => {
     if (file) handleFile(file);
   };
 
-  const handleRestoreDefault = () => {
-    localStorage.removeItem(HERO_BANNER_LS_KEY);
-    setCurrentUrl(DEFAULT_BANNER);
-    setPreviewUrl(null);
-    window.dispatchEvent(new CustomEvent("heroBannerChanged", { detail: { url: DEFAULT_BANNER } }));
-    sileo.success({ title: "Banner restablecido", description: "Se restauró la imagen predeterminada.", duration: 2000 });
+  const handleRestoreDefault = async () => {
+    try {
+      await saveBanner(DEFAULT_BANNER);
+      notifyHero(DEFAULT_BANNER);
+      sileo.success({ title: "Banner restablecido", description: "Se restauró la imagen predeterminada.", duration: 2000 });
+    } catch {
+      sileo.error({ title: "Error", description: "No se pudo restablecer el banner.", duration: 2000 });
+    }
   };
 
   const displayUrl = previewUrl || currentUrl;
   const isDefault = currentUrl === DEFAULT_BANNER;
+  const isBusy = isUploading || isSaving;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3.5 bg-gradient-to-r from-violet-600 to-purple-600 rounded-t-2xl">
         <Image className="h-4 w-4 text-white" />
         <span className="text-sm font-bold text-white">🖼️ Imagen de fondo del Hero</span>
-        <span className="ml-auto text-[11px] text-purple-200 font-medium">Banner principal</span>
+        <span className="ml-auto text-[11px] text-purple-200 font-medium">Banner principal · DB</span>
       </div>
 
       <div className="p-5 space-y-4">
         <p className="text-xs text-gray-500">
-          Esta imagen se muestra como fondo en la sección principal del sitio. Sube una nueva imagen (JPG, PNG, WebP · máx. 5 MB).
+          Esta imagen se muestra como fondo en la sección principal del sitio. La URL se guarda en la base de datos y se ve en todos los navegadores.
         </p>
 
         {/* Preview actual */}
@@ -494,20 +500,20 @@ const HeroBannerCard = () => {
               Vista previa del Hero
             </span>
           </div>
-          {isUploading && (
+          {isBusy && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
               <div className="flex flex-col items-center gap-2 text-white">
                 <svg className="animate-spin h-7 w-7" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" />
                 </svg>
-                <span className="text-xs font-medium">Subiendo...</span>
+                <span className="text-xs font-medium">{isUploading ? "Subiendo..." : "Guardando en DB..."}</span>
               </div>
             </div>
           )}
-          {justSaved && !isUploading && (
+          {justSaved && !isBusy && (
             <div className="absolute top-2 right-2">
               <span className="flex items-center gap-1 text-xs font-semibold text-white bg-emerald-500 px-2 py-1 rounded-full shadow">
-                <CheckCircle2 className="h-3 w-3" /> Guardado
+                <CheckCircle2 className="h-3 w-3" /> Guardado en DB
               </span>
             </div>
           )}
@@ -543,7 +549,8 @@ const HeroBannerCard = () => {
         {!isDefault && (
           <button
             onClick={handleRestoreDefault}
-            className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-rose-500 transition-colors"
+            disabled={isBusy}
+            className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-rose-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Restaurar imagen predeterminada

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { HOURS_LIST } from "@/data/mockData";
 import { formatAnimalNumber } from "@/lib/utils";
 import { useSorteosContext } from "@/context/SorteosContext";
+import { useSiteConfig } from "@/hooks/useSiteConfig";
 
 /* ─── Helpers de tiempo ────────────────────────────────────────── */
 
@@ -146,11 +147,18 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const { results, loading } = useSorteosContext();
   const today = getTodayStr();
 
-  // Banner de fondo dinámico (configurable desde Ajustes)
+  // Banner de fondo — lee de la DB (site_config) con localStorage como fallback instantáneo
+  const { value: bannerFromDb } = useSiteConfig("hero_banner_url", "/images/banner.png");
   const [bannerUrl, setBannerUrl] = useState<string>(
     () => localStorage.getItem("lotto_hero_banner_url") || "/images/banner.png"
   );
 
+  // Sincronizar cuando la DB responde con el valor real
+  useEffect(() => {
+    if (bannerFromDb) setBannerUrl(bannerFromDb);
+  }, [bannerFromDb]);
+
+  // Actualizar en vivo cuando el admin cambia el banner desde el panel
   useEffect(() => {
     const onBannerChange = (e: Event) => {
       const url = (e as CustomEvent<{ url: string }>).detail.url;
