@@ -4,6 +4,7 @@ import { HOURS_LIST } from "@/data/mockData";
 import { formatAnimalNumber } from "@/lib/utils";
 import { useSorteosContext } from "@/context/SorteosContext";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
+import RouletteReveal from "@/components/RouletteReveal";
 
 /* ─── Helpers de tiempo ────────────────────────────────────────── */
 
@@ -128,6 +129,12 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const [countdown, setCountdown] = useState(() => secondsToNext(getCurrentHourIndex()));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Roulette reveal state ───────────────────────────────────
+  const [rouletteVisible, setRouletteVisible] = useState(false);
+  const [rouletteData, setRouletteData] = useState<{ emoji: string; animal: string; number: string | number } | null>(null);
+  const lastResultIdRef = useRef<number | null>(null);
+  const hasProcessedInitialResult = useRef(false);
+
   // ── Partículas: DB es la fuente de verdad ───────────────────────
   // useSiteConfig: DB → localStorage → "loteria"
   const { value: particleThemeRaw } = useSiteConfig("hero_particle_theme", "loteria");
@@ -189,6 +196,58 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
 
   const displayResult = getResult(displayIdx);
   const isLive = displayIdx === activeIdx;
+
+  // ── Detect new result → fire roulette ──────────────────────
+  useEffect(() => {
+    if (loading) return;
+
+    const liveResult = getResult(activeIdx);
+    
+    if (!liveResult) {
+      hasProcessedInitialResult.current = true;
+      return;
+    }
+
+    const hasVisitedOnce = localStorage.getItem("hasVisitedOnce");
+
+    // Caso 1: Primera vez que el dispositivo entra a la web
+    if (!hasVisitedOnce) {
+      localStorage.setItem("hasVisitedOnce", "true");
+      lastResultIdRef.current = liveResult.id;
+      hasProcessedInitialResult.current = true;
+
+      const t = setTimeout(() => {
+        setRouletteData({
+          emoji: liveResult.emoji,
+          animal: liveResult.animal,
+          number: formatAnimalNumber(liveResult.animal, liveResult.number),
+        });
+        setRouletteVisible(true);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+
+    // Caso 2: Visitante recurrente, inicializando vista en esta sesión
+    if (!hasProcessedInitialResult.current) {
+      lastResultIdRef.current = liveResult.id;
+      hasProcessedInitialResult.current = true;
+      return;
+    }
+
+    // Caso 3: Ya en la página, aparece un nuevo resultado
+    if (lastResultIdRef.current !== liveResult.id) {
+      lastResultIdRef.current = liveResult.id;
+      const t = setTimeout(() => {
+        setRouletteData({
+          emoji: liveResult.emoji,
+          animal: liveResult.animal,
+          number: formatAnimalNumber(liveResult.animal, liveResult.number),
+        });
+        setRouletteVisible(true);
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [getResult, activeIdx, loading]);
 
   const transitionTo = useCallback(
     (nextIdx: number, dir: "forward" | "back" = "forward") => {
@@ -519,6 +578,18 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
           </p>
         </motion.div>
       </div>
+
+      {/* ── Roulette Reveal Overlay ───────────────────────────── */}
+      {rouletteData && (
+        <RouletteReveal
+          visible={rouletteVisible}
+          finalEmoji={rouletteData.emoji}
+          finalAnimal={rouletteData.animal}
+          finalNumber={rouletteData.number}
+          onComplete={() => setRouletteVisible(false)}
+        />
+      )}
+
 
       {/* Keyframes inline */}
       <style>{`
