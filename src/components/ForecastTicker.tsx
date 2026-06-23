@@ -28,7 +28,7 @@ function getNextHourString(): string {
 
 const ForecastTicker = () => {
   const { results } = useSorteosContext();
-  const { proyeccion, lastUpdated } = useProyeccion(results, 6, 4 * 60 * 60 * 1000);
+  const { proyeccion, lastUpdated } = useProyeccion(results, 5, 4 * 60 * 60 * 1000);
 
   const [nextHour, setNextHour] = useState(getNextHourString);
   const [visible, setVisible] = useState(true);

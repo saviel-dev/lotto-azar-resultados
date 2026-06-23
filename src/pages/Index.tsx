@@ -65,7 +65,7 @@ const Index = () => {
         {!loading && !error && (
           <div ref={probRef} className="container max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div ref={premiosRef} className="lg:col-span-4">
-              <ProbabilityPanel results={results} />
+              <ProbabilityPanel results={results} loadingHistory={loadingHistory} />
             </div>
             <div className="lg:col-span-8">
               <EnjauladosPanel enjaulados={enjaulados} loadingHistory={loadingHistory} />

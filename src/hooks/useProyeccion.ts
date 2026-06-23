@@ -123,7 +123,7 @@ function loadWeightsFromStorage(): Record<string, number> | null {
 ══════════════════════════════════════════════════════════════ */
 export function useProyeccion(
   results: LotteryResult[],
-  proyeccionCount = 5,
+  proyeccionCount = 6,
   refreshMs = DEFAULT_REFRESH_MS
 ): UseProyeccionResult {
   const [seed, setSeed] = useState(0);

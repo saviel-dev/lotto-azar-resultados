@@ -1,18 +1,42 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { type LotteryResult } from '@/data/mockData';
 import { TrendingUp, Ban, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatAnimalNumber } from '@/lib/utils';
-import { useProyeccion } from '@/hooks/useProyeccion';
-import { useProbabilidades } from '@/hooks/useProbabilidades';
-import { Waveform } from '@uiball/loaders';
+import { useProyeccion, type ProyeccionItem } from '@/hooks/useProyeccion';
 
-interface ProbabilityPanelProps {
-  results: LotteryResult[];
+/* ─── Caché de proyección ─────────────────────────────────────── */
+const LS_PROYECCION_KEY = 'lotto_proyeccion_v1';
+const PROYECCION_TTL_MS  = 4 * 60 * 60 * 1000; // 4 horas
+
+interface CachedProyeccion {
+  items: ProyeccionItem[];
+  generatedAt: number; // timestamp ms
 }
 
+function loadCache(): CachedProyeccion | null {
+  try {
+    const raw = localStorage.getItem(LS_PROYECCION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as CachedProyeccion;
+  } catch { return null; }
+}
 
-/** Color del badge según probabilidad bruta */
+function saveCache(items: ProyeccionItem[]): void {
+  try {
+    const data: CachedProyeccion = { items, generatedAt: Date.now() };
+    localStorage.setItem(LS_PROYECCION_KEY, JSON.stringify(data));
+  } catch { /* silenciar */ }
+}
+
+function isCacheValid(cache: CachedProyeccion): boolean {
+  return Date.now() - cache.generatedAt < PROYECCION_TTL_MS;
+}
+
+/* ─── Constantes UI ───────────────────────────────────────────── */
+const PROYECCION_COUNT = 6;
+
+/* ─── Helpers visuales ─────────────────────────────────────────── */
 function weightColor(weight: number): { bar: string; badge: string; text: string } {
   if (weight >= 28) return { bar: 'from-emerald-500 to-green-400', badge: 'bg-emerald-500/20 border-emerald-500/40', text: 'text-emerald-300' };
   if (weight >= 18) return { bar: 'from-blue-500 to-cyan-400', badge: 'bg-blue-500/20 border-blue-500/40', text: 'text-blue-300' };
@@ -20,51 +44,106 @@ function weightColor(weight: number): { bar: string; badge: string; text: string
   return { bar: 'from-slate-500 to-slate-400', badge: 'bg-slate-500/20 border-slate-500/40', text: 'text-slate-400' };
 }
 
-export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) => {
-  // Carga las probabilidades desde Supabase (con fallback a ANIMAL_WEIGHTS)
-  // El hook sincroniza automáticamente el localStorage que usa useProyeccion
-  const { isLoading: probLoading, error: probError } = useProbabilidades();
+/* ─── Props ─────────────────────────────────────────────────────── */
+interface ProbabilityPanelProps {
+  results: LotteryResult[];
+  /** true mientras se cargan lotes históricos en background */
+  loadingHistory?: boolean;
+}
 
-  const { proyeccion, weightedList, excludedYesterday, lastUpdated, refresh } = useProyeccion(results, 15, 4 * 60 * 60 * 1000);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [proyPage, setProyPage] = useState(0);
+/* ════════════════════════════════════════════════════════════════ */
+export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results, loadingHistory = false }) => {
+  const {
+    proyeccion,   // selección fresca del motor
+    weightedList,
+    excludedYesterday,
+    lastUpdated,
+    refresh,
+  } = useProyeccion(results, PROYECCION_COUNT, PROYECCION_TTL_MS);
 
-  const proyItemsPerPage = 5;
-  const proyTotalPages = Math.ceil(proyeccion.length / proyItemsPerPage);
+  // ── Proyección estable (desde localStorage o generada cuando el historial termina) ──
+  const [stableProyeccion, setStableProyeccion] = useState<ProyeccionItem[]>(() => {
+    // Inicializar desde caché si es válida → evita el spinner cuando ya hay datos guardados
+    const cache = loadCache();
+    return (cache && isCacheValid(cache)) ? cache.items : [];
+  });
 
+  const historyLoadedRef = useRef(false);
+
+  // Fija la proyección cuando el historial termina de cargar
   useEffect(() => {
-    if (proyPage >= proyTotalPages && proyTotalPages > 0) {
-      setProyPage(proyTotalPages - 1);
+    if (loadingHistory || historyLoadedRef.current) return;
+    historyLoadedRef.current = true;
+
+    const cache = loadCache();
+    if (cache && isCacheValid(cache)) {
+      // Caché válida → usarla (ya puede estar en el estado inicial)
+      setStableProyeccion(cache.items);
+    } else if (proyeccion.length > 0) {
+      // Sin caché o expirada → usar la proyección recién generada y guardarla
+      setStableProyeccion(proyeccion);
+      saveCache(proyeccion);
     }
-  }, [proyTotalPages, proyPage]);
+  }, [loadingHistory, proyeccion]);
 
-  const paginatedProyeccion = proyeccion.slice(proyPage * proyItemsPerPage, (proyPage + 1) * proyItemsPerPage);
+  // Rotación automática cada 4 horas: regenera y persiste
+  const doRefresh = useCallback(() => {
+    refresh(); // dispara un nuevo seed en el hook
+  }, [refresh]);
 
-  // Top-26 animales (Guía probable) por probabilidad, excluyendo los ya sorteados
+  // Cuando `proyeccion` cambie DESPUÉS de la carga inicial (por el auto-refresh),
+  // actualizamos la proyección estable y la guardamos en localStorage
+  const prevProyeccionRef = useRef(proyeccion);
+  useEffect(() => {
+    if (!historyLoadedRef.current) return;
+    if (proyeccion === prevProyeccionRef.current) return;
+    prevProyeccionRef.current = proyeccion;
+
+    if (proyeccion.length > 0) {
+      setStableProyeccion(proyeccion);
+      saveCache(proyeccion);
+    }
+  }, [proyeccion]);
+
+  // Auto-refresh cada 4 horas (en sincronía con el TTL del caché)
+  useEffect(() => {
+    const msUntilFirstRefresh = (() => {
+      const cache = loadCache();
+      if (!cache) return PROYECCION_TTL_MS;
+      const elapsed = Date.now() - cache.generatedAt;
+      return Math.max(0, PROYECCION_TTL_MS - elapsed);
+    })();
+
+    // Primer disparo exactamente cuando expire el caché actual
+    const firstTimeout = setTimeout(() => {
+      doRefresh();
+      // Luego repite cada 4 horas
+    }, msUntilFirstRefresh);
+
+    return () => clearTimeout(firstTimeout);
+  }, [doRefresh]);
+
+  // ── ¿Mostrar spinner? Solo si no hay caché válida Y el historial aún carga ──
+  const showLoader = loadingHistory && stableProyeccion.length === 0;
+
+  /* ─── Guía Probable (Top 26) ────────────────────────────────── */
+  const [currentPage, setCurrentPage] = useState(0);
+
   const referenceList = useMemo(() => {
-    return weightedList
-      .filter((a) => !a.isExcluded)
-      .slice(0, 26); // máximo 26 para que el usuario pueda ver suficientes pero no se aburra
+    return weightedList.filter((a) => !a.isExcluded).slice(0, 26);
   }, [weightedList]);
 
-  // Paginación: 3 por página → máximo 9 páginas
   const itemsPerPage = 3;
   const totalPages = Math.ceil(referenceList.length / itemsPerPage);
 
   useEffect(() => {
-    if (currentPage >= totalPages && totalPages > 0) {
-      setCurrentPage(totalPages - 1);
-    }
+    if (currentPage >= totalPages && totalPages > 0) setCurrentPage(totalPages - 1);
   }, [totalPages, currentPage]);
 
-  const startIndex = currentPage * itemsPerPage;
-  const paginatedAnimals = referenceList.slice(startIndex, startIndex + itemsPerPage);
-
+  const paginatedAnimals = referenceList.slice(currentPage * itemsPerPage, (currentPage + 1) * itemsPerPage);
   const maxWeight = referenceList.length > 0 ? referenceList[0].weight : 1;
 
-
-
-
+  /* ─── Render ─────────────────────────────────────────────────── */
   return (
     <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-3xl p-6 shadow-2xl relative overflow-hidden border border-indigo-800/40">
       {/* Background decor */}
@@ -80,100 +159,91 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight text-white leading-none">Probabilidades</h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-xs font-medium text-indigo-400">
-                Probabilidad · Actualiza cada 4 horas
-              </p>
-              {!probLoading && !probError && (
-                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live
-                </span>
-              )}
-            </div>
+            <p className="text-xs font-medium text-indigo-400 mt-0.5">
+              Probabilidad · Actualiza cada 4 horas
+            </p>
           </div>
         </div>
       </div>
 
-           {/* ── Proyección activa ────────────────────────────────── */}
+      {/* ── Proyección activa ── */}
       <div className="mb-5">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-black uppercase tracking-widest text-amber-400">Proyección activa</span>
-            </div>
-            {probLoading && (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <Waveform size={14} lineWeight={2} speed={1} color="#fbbf24" />
-                <span className="text-[11px] font-medium text-amber-500/90">Calculando proyección…</span>
-              </div>
-            )}
-          </div>
-
-          {/* Paginación Proyección */}
-          {proyTotalPages > 1 && (
-            <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700/50 rounded-lg p-0.5">
-              <button
-                onClick={() => setProyPage(p => Math.max(0, p - 1))}
-                disabled={proyPage === 0}
-                className="w-5 h-5 flex items-center justify-center rounded-[5px] text-indigo-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[9px] font-bold text-indigo-400 min-w-[2rem] text-center">
-                {proyPage + 1} / {proyTotalPages}
-              </span>
-              <button
-                onClick={() => setProyPage(p => Math.min(proyTotalPages - 1, p + 1))}
-                disabled={proyPage === proyTotalPages - 1}
-                className="w-5 h-5 flex items-center justify-center rounded-[5px] text-indigo-300 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-amber-400" />
+          <span className="text-xs font-black uppercase tracking-widest text-amber-400">
+            Proyección activa
+          </span>
         </div>
 
-        {/* ── Cards de proyección ── */}
-        <div className="grid grid-cols-2 gap-2">
-          <AnimatePresence mode="popLayout">
-            {paginatedProyeccion.map((p, i) => {
-              const colors = weightColor(p.weight);
-              return (
+        <AnimatePresence mode="wait">
+          {showLoader ? (
+            /* Spinner — solo aparece cuando no hay caché */
+            <motion.div
+              key="loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.07] py-7"
+            >
+              <div className="relative w-10 h-10">
+                <div className="absolute inset-0 rounded-full border-[3px] border-amber-400/20" />
                 <motion.div
-                  layout
-                  initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
-                  transition={{ delay: i * 0.05, type: 'spring', stiffness: 200, damping: 20 }}
-                  key={`${p.name}-${lastUpdated.getTime()}`}
-                  className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 shadow-sm"
-                  title={`Proyección activa: ${p.emoji} ${p.name} · Número: ${p.number}`}
-                >
-                  <span className="text-xl leading-none">{p.emoji}</span>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none truncate">{p.name}</span>
-                    <span className={`text-xs font-black leading-none mt-0.5 ${colors.text}`}>{p.number}</span>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
+                  className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-amber-400"
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                />
+              </div>
+              <span className="text-sm font-black uppercase tracking-widest text-amber-400">
+                Cargando proyección
+              </span>
+            </motion.div>
+          ) : (
+            /* Grid de 6 animales */
+            <motion.div
+              key="grid"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="grid grid-cols-3 gap-2"
+            >
+              {stableProyeccion.slice(0, PROYECCION_COUNT).map((p, i) => {
+                const colors = weightColor(p.weight);
+                return (
+                  <motion.div
+                    key={p.name}
+                    initial={{ opacity: 0, scale: 0.85, y: 16 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ delay: i * 0.05, type: 'spring', stiffness: 220, damping: 22 }}
+                    className="flex items-center gap-2 bg-slate-800/70 border border-slate-700/50 rounded-xl px-3 py-2.5 shadow-sm"
+                    title={`${p.emoji} ${p.name} · #${p.number}`}
+                  >
+                    <span className="text-xl leading-none shrink-0">{p.emoji}</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-white leading-none truncate">
+                        {p.name}
+                      </span>
+                      <span className={`text-sm font-black leading-tight mt-0.5 ${colors.text}`}>
+                        {p.number}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Divider */}
       <div className="w-full h-px bg-indigo-800/40 mb-5" />
 
-      {/* ── Tabla de % de salida visible al jugador ───────────── */}
+      {/* ── Guía Probable (Top 26) ─────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">
             Guía Probable (Top 26)
           </p>
-
-          {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700/50 rounded-lg p-0.5">
               <button
@@ -210,10 +280,8 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
               {paginatedAnimals.map((a, idx) => {
                 const colors = weightColor(a.weight);
                 const barWidth = maxWeight > 0 ? (a.weight / maxWeight) * 100 : 0;
-
                 return (
                   <div key={a.name} className="flex items-center gap-3">
-                    {/* Animal chip */}
                     <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/40 rounded-xl px-2.5 py-1.5 min-w-[110px] shrink-0">
                       <span className="text-xl leading-none drop-shadow-sm">{a.emoji}</span>
                       <div className="flex flex-col min-w-0">
@@ -221,16 +289,10 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
                         <span className="text-xs font-black text-white leading-none">{formatAnimalNumber(a.name, a.number)}</span>
                       </div>
                     </div>
-
-                    {/* Barra de % de salida */}
                     <div className="flex-1">
                       <div className="flex justify-between items-end mb-1 px-0.5">
-                        <span className={`text-[10px] font-bold ${colors.text}`}>
-                          Probabilidad
-                        </span>
-                        <span className="text-[10px] font-black text-white">
-                          {a.weight}%
-                        </span>
+                        <span className={`text-[10px] font-bold ${colors.text}`}>Probabilidad</span>
+                        <span className="text-[10px] font-black text-white">{a.weight}%</span>
                       </div>
                       <div className="h-2 w-full bg-slate-800/60 rounded-full overflow-hidden border border-slate-700/40">
                         <motion.div
@@ -251,7 +313,7 @@ export const ProbabilityPanel: React.FC<ProbabilityPanelProps> = ({ results }) =
         </div>
       </div>
 
-      {/* ── Animal excluido de ayer ──────────────────────────── */}
+      {/* ── Animal excluido de ayer ── */}
       {excludedYesterday && (
         <div className="mt-5 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-900/20 border border-red-800/30">
           <Ban className="w-4 h-4 text-red-400 shrink-0" />
