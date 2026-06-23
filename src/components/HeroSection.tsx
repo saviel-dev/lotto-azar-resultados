@@ -197,44 +197,25 @@ const HeroSection = ({ updatedAgo }: HeroSectionProps) => {
   const displayResult = getResult(displayIdx);
   const isLive = displayIdx === activeIdx;
 
-  // ── Detect new result → fire roulette ──────────────────────
+  // ── Detect result → fire roulette ─────────────────────────
   useEffect(() => {
     if (loading) return;
 
     const liveResult = getResult(activeIdx);
-    
+
     if (!liveResult) {
       hasProcessedInitialResult.current = true;
       return;
     }
 
-    const hasVisitedOnce = localStorage.getItem("hasVisitedOnce");
-
-    // Caso 1: Primera vez que el dispositivo entra a la web
-    if (!hasVisitedOnce) {
-      localStorage.setItem("hasVisitedOnce", "true");
-      lastResultIdRef.current = liveResult.id;
-      hasProcessedInitialResult.current = true;
-
-      const t = setTimeout(() => {
-        setRouletteData({
-          emoji: liveResult.emoji,
-          animal: liveResult.animal,
-          number: formatAnimalNumber(liveResult.animal, liveResult.number),
-        });
-        setRouletteVisible(true);
-      }, 300);
-      return () => clearTimeout(t);
-    }
-
-    // Caso 2: Visitante recurrente, inicializando vista en esta sesión
+    // Carga inicial: guardar el ID actual sin mostrar ruleta
     if (!hasProcessedInitialResult.current) {
       lastResultIdRef.current = liveResult.id;
       hasProcessedInitialResult.current = true;
       return;
     }
 
-    // Caso 3: Ya en la página, aparece un nuevo resultado
+    // Nuevo resultado mientras el usuario está en la página → disparar ruleta
     if (lastResultIdRef.current !== liveResult.id) {
       lastResultIdRef.current = liveResult.id;
       const t = setTimeout(() => {
